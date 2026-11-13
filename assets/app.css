@@ -69,7 +69,6 @@ h1, h2, h3, p { margin: 0; }
 .tagline {
   color: var(--muted);
   font-size: 0.95rem;
-  max-width: 36rem;
 }
 
 .lang-switch {
