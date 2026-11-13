@@ -70,10 +70,15 @@
     const ok = canContinue(thread) && !running;
     continueBtn.hidden = !ok;
     continueBtn.disabled = !ok;
+    if (ok && thread?.status === "error") {
+      continueBtn.textContent = "Nach Fehler fortsetzen";
+    } else {
+      continueBtn.textContent = "Fortsetzen";
+    }
   }
 
   function updateExtendPanel(thread) {
-    const show = !!thread && !running && (thread.messages?.length || 0) > 0;
+    const show = !!thread && !running && thread.status === "done";
     extendPanel.hidden = !show;
     extendBtn.disabled = !show;
   }
