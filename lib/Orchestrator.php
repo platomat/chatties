@@ -108,6 +108,14 @@ final class Orchestrator
                 },
                 0.7,
                 (string) ($agent['apiKey'] ?? ''),
+                static function () use ($emit): void {
+                    // Keep browser↔PHP proxies awake during slow local generation.
+                    if (function_exists('sse_ping')) {
+                        sse_ping();
+                    } else {
+                        $emit('ping', ['t' => time()]);
+                    }
+                },
             );
 
             $latest = $this->store->get($threadId);

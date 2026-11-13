@@ -57,6 +57,18 @@ function sse_event(string $event, array $data): void
         $json = '{"error":"encode failed"}';
     }
     echo "event: {$event}\ndata: {$json}\n\n";
+    sse_flush();
+}
+
+/** Keep proxies from idle-closing long LLM streams. */
+function sse_ping(): void
+{
+    echo ': ping ' . time() . "\n\n";
+    sse_flush();
+}
+
+function sse_flush(): void
+{
     if (function_exists('ob_flush')) {
         @ob_flush();
     }

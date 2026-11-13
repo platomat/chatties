@@ -10,6 +10,7 @@ final class LlmClient
     /**
      * @param array<int, array{role:string, content:string}> $messages
      * @param callable(string):void|null $onDelta
+     * @param callable():void|null $onHeartbeat
      */
     public function chat(
         string $apiUrl,
@@ -18,6 +19,7 @@ final class LlmClient
         ?callable $onDelta = null,
         float $temperature = 0.7,
         string $apiKey = '',
+        ?callable $onHeartbeat = null,
     ): string {
         $stream = $onDelta !== null;
         $url = $this->completionsUrl($apiUrl);
@@ -30,6 +32,10 @@ final class LlmClient
         ];
         if ($model !== '') {
             $payload['model'] = $model;
+        }
+        $maxTokens = $this->maxTokens();
+        if ($maxTokens > 0) {
+            $payload['max_tokens'] = $maxTokens;
         }
 
         $body = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -81,6 +87,8 @@ final class LlmClient
         $httpStatus = 0;
         $sawEvent = false;
         $streamError = null;
+        $abortHits = 0;
+        $lastHeartbeat = time();
 
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
@@ -89,20 +97,43 @@ final class LlmClient
             CURLOPT_RETURNTRANSFER => false,
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_NOPROGRESS => false,
+            CURLOPT_XFERINFOFUNCTION => static function (
+                $ch,
+                float $dlTotal,
+                float $dlNow,
+                float $ulTotal,
+                float $ulNow
+            ) use (&$lastHeartbeat, &$streamError, $onHeartbeat): int {
+                if ($streamError !== null) {
+                    return 1;
+                }
+                $now = time();
+                if ($now - $lastHeartbeat >= 10) {
+                    $lastHeartbeat = $now;
+                    if ($onHeartbeat !== null) {
+                        $onHeartbeat();
+                    }
+                    // Confirm abort only around heartbeat (avoid false positives mid-chunk).
+                    if (connection_aborted()) {
+                        $streamError = '__client_aborted__';
+                        return 1;
+                    }
+                }
+                return 0;
+            },
             CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (
                 &$buffer,
                 &$content,
                 &$httpStatus,
                 &$sawEvent,
                 &$streamError,
-                $onDelta
+                &$abortHits,
+                &$lastHeartbeat,
+                $onDelta,
+                $onHeartbeat
             ): int {
                 if ($streamError !== null) {
-                    return 0;
-                }
-                // Browser reload / tab close → stop LM Studio request so Continue won't double-fire.
-                if (connection_aborted()) {
-                    $streamError = '__client_aborted__';
                     return 0;
                 }
                 if ($httpStatus === 0) {
@@ -150,6 +181,21 @@ final class LlmClient
                     }
                     $content .= $delta;
                     $onDelta($delta);
+                    $lastHeartbeat = time();
+                }
+
+                // Require repeated abort signals — single blips happen with proxies.
+                if (connection_aborted()) {
+                    $abortHits++;
+                    if ($abortHits >= 3) {
+                        $streamError = '__client_aborted__';
+                        return 0;
+                    }
+                    if ($onHeartbeat !== null) {
+                        $onHeartbeat();
+                    }
+                } else {
+                    $abortHits = 0;
                 }
 
                 return strlen($chunk);
@@ -170,8 +216,8 @@ final class LlmClient
         if ($streamError !== null) {
             throw new RuntimeException($streamError);
         }
-        // CURLE_WRITE_ERROR (23) when we aborted via return 0
-        if ($ok === false && $errno !== 0 && $errno !== 23) {
+        // CURLE_WRITE_ERROR (23) / CURLE_ABORTED_BY_CALLBACK (42)
+        if ($ok === false && $errno !== 0 && $errno !== 23 && $errno !== 42) {
             throw new RuntimeException('LLM-Stream fehlgeschlagen: ' . ($error !== '' ? $error : 'unbekannt'));
         }
         if ($httpStatus >= 400) {
@@ -192,9 +238,16 @@ final class LlmClient
         if (!is_numeric($raw)) {
             return 1800;
         }
-        $n = (int) $raw;
-        // 0 = unlimited (curl)
-        return max(0, $n);
+        return max(0, (int) $raw);
+    }
+
+    private function maxTokens(): int
+    {
+        $raw = Env::get('CHATTIES_MAX_TOKENS', '1024') ?? '1024';
+        if (!is_numeric($raw)) {
+            return 1024;
+        }
+        return max(0, (int) $raw);
     }
 
     private function completionsUrl(string $apiUrl): string

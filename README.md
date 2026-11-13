@@ -20,7 +20,7 @@ Works with any OpenAI-compatible `/v1` chat API (local or remote). PHP orchestra
 
 `.env` is gitignored. If PHP runs in a VM and the API is on the host, use the host LAN IP (or an SSH tunnel), not `127.0.0.1` inside the VM.
 
-For slow models, raise `CHATTIES_HTTP_TIMEOUT` (seconds; `0` = unlimited). Default is `1800`.
+For slow models, raise `CHATTIES_HTTP_TIMEOUT` (seconds; `0` = unlimited; default `1800`) and optionally lower `CHATTIES_MAX_TOKENS` (default `1024`) so turns finish before reverse-proxy idle timeouts.
 
 Note: API keys entered in the UI are stored in local thread JSON under `data/threads/` (also gitignored).
 
