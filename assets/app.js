@@ -152,7 +152,11 @@
     el.removeAttribute("id");
   }
 
-  function showTyping(speaker, name) {
+  function nextRoundNumber(thread) {
+    return Math.floor((thread.messages?.length || 0) / 2) + 1;
+  }
+
+  function showTyping(speaker, name, round) {
     hideTyping();
     const empty = chatEl.querySelector(".empty");
     if (empty) empty.remove();
@@ -164,7 +168,7 @@
     el.innerHTML = `
       <div class="who">
         <span class="who-name">${escapeHtml(name)}</span>
-        <span class="who-meta">tippt</span>
+        <span class="who-meta">Runde ${round}</span>
       </div>
       <div class="body">
         <span class="typing-label">denkt nach</span>
@@ -418,8 +422,9 @@
 
       while (!abort) {
         const who = nextSpeakerInfo(thread);
-        showTyping(who.key, who.name);
-        setStatus(`${who.name} tippt…`);
+        const round = nextRoundNumber(thread);
+        showTyping(who.key, who.name, round);
+        setStatus(`${who.name} denkt nach (Runde ${round})…`);
 
         turnAbort = new AbortController();
         let turn;
