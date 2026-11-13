@@ -32,6 +32,7 @@ function json_error(string $message, int $status = 400, ?array $extra = null): n
 
 function sse_bootstrap(): void
 {
+    // Keep script alive briefly so we can detect abort and cancel the LLM curl.
     ignore_user_abort(true);
     @set_time_limit(0);
     @ini_set('max_execution_time', '0');

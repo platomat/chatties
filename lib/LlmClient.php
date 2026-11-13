@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/Env.php';
+require_once __DIR__ . '/ClientAbortedException.php';
 
 final class LlmClient
 {
@@ -99,6 +100,11 @@ final class LlmClient
                 if ($streamError !== null) {
                     return 0;
                 }
+                // Browser reload / tab close → stop LM Studio request so Continue won't double-fire.
+                if (connection_aborted()) {
+                    $streamError = '__client_aborted__';
+                    return 0;
+                }
                 if ($httpStatus === 0) {
                     $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 }
@@ -158,6 +164,9 @@ final class LlmClient
         }
         curl_close($ch);
 
+        if ($streamError === '__client_aborted__') {
+            throw new ClientAbortedException('Client disconnected.');
+        }
         if ($streamError !== null) {
             throw new RuntimeException($streamError);
         }

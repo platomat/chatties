@@ -21,12 +21,18 @@ try {
         json_error('Thread nicht gefunden.', 404);
     }
 
-    // Interrupted mid-stream (page reload) → unlock so the client can resume.
+    // Only unlock clearly stale "running" locks (orphaned after crash).
     if (($thread['status'] ?? '') === 'running') {
-        $thread['status'] = 'ready';
-        $thread['error'] = null;
-        $store->save($thread);
-        $thread['resumedFromRunning'] = true;
+        $started = strtotime((string) ($thread['generationStartedAt'] ?? '')) ?: 0;
+        $stale = $started === 0 || (time() - $started) > 90;
+        if ($stale) {
+            $thread['status'] = 'ready';
+            $thread['error'] = null;
+            $thread['generationId'] = null;
+            $thread['generationStartedAt'] = null;
+            $store->save($thread);
+            $thread['resumedFromRunning'] = true;
+        }
     }
 
     json_response(['ok' => true, 'thread' => $thread]);

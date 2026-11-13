@@ -139,7 +139,7 @@
       : t("resume.paused", { name: who.name });
     el.querySelector("[data-resume]").addEventListener("click", () => {
       if (running || !currentThread || !canContinue(currentThread)) return;
-      runTurns(currentThread);
+      runTurns(currentThread, { force: true });
     });
     chatEl.appendChild(el);
     el.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -348,14 +348,18 @@
     return data;
   }
 
-  async function streamTurn(threadIdValue, signal) {
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function streamTurn(threadIdValue, signal, { force = false } = {}) {
     const res = await fetch("api/turn.php", {
       method: "POST",
       headers: {
         Accept: "text/event-stream",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ id: threadIdValue }),
+      body: JSON.stringify({ id: threadIdValue, force: !!force }),
       signal,
     });
 
@@ -477,6 +481,36 @@
     }
   }
 
+  async function fetchThread(id) {
+    const data = await api(`api/thread.php?id=${encodeURIComponent(id)}`);
+    return data.thread;
+  }
+
+  async function waitOutInFlight(thread) {
+    if (thread.status !== "running") {
+      return { thread, wasInterrupted: false };
+    }
+
+    const beforeCount = countAgentMessages(thread);
+    setStatus(t("status.waitingInFlight"));
+    let latest = thread;
+
+    for (let i = 0; i < 20; i++) {
+      await sleep(1000);
+      latest = await fetchThread(thread.id);
+      if (latest.status !== "running") {
+        break;
+      }
+    }
+
+    const grew = countAgentMessages(latest) > beforeCount;
+    return {
+      thread: latest,
+      wasInterrupted: !grew,
+      recoveredMessage: grew,
+    };
+  }
+
   async function openThread(id, { autoContinue = false } = {}) {
     if (running) {
       setStatus(t("status.waitRunning"), true);
@@ -485,12 +519,24 @@
 
     setStatus(t("status.loadingThread"));
     try {
-      const data = await api(`api/thread.php?id=${encodeURIComponent(id)}`);
-      let thread = data.thread;
-      const wasInterrupted = !!data.thread.resumedFromRunning || thread.status === "running";
+      let thread = await fetchThread(id);
+      let wasInterrupted = false;
 
       if (thread.status === "running") {
-        thread = { ...thread, status: "ready", error: null };
+        const waited = await waitOutInFlight(thread);
+        thread = waited.thread;
+        wasInterrupted = waited.wasInterrupted;
+        if (thread.status === "running") {
+          // Still locked — treat as interrupted; Continue will force a new generation.
+          thread = { ...thread, status: "ready", error: null };
+          wasInterrupted = true;
+        } else if (waited.recoveredMessage) {
+          wasInterrupted = false;
+        } else {
+          wasInterrupted = true;
+        }
+      } else if (thread.resumedFromRunning) {
+        wasInterrupted = true;
       }
 
       currentThread = thread;
@@ -524,14 +570,14 @@
       document.getElementById("chat").scrollIntoView({ behavior: "smooth", block: "start" });
 
       if (autoContinue && canContinue(thread)) {
-        await runTurns(thread);
+        await runTurns(thread, { force: wasInterrupted });
       }
     } catch (err) {
       setStatus(err.message || String(err), true);
     }
   }
 
-  async function runTurns(thread) {
+  async function runTurns(thread, { force = false } = {}) {
     abort = false;
     running = true;
     startBtn.disabled = true;
@@ -554,7 +600,8 @@
         turnAbort = new AbortController();
         let turn;
         try {
-          turn = await streamTurn(threadId, turnAbort.signal);
+          turn = await streamTurn(threadId, turnAbort.signal, { force });
+          force = false; // only first turn after resume may force-steal the lock
         } catch (err) {
           if (err.name === "AbortError" || abort) {
             setStatus(t("status.stopped"));
@@ -642,7 +689,8 @@
 
   continueBtn.addEventListener("click", () => {
     if (running || !currentThread || !canContinue(currentThread)) return;
-    runTurns(currentThread);
+    // Force: cancel any orphaned server generation left after a reload.
+    runTurns(currentThread, { force: true });
   });
 
   extendBtn.addEventListener("click", async () => {
@@ -699,6 +747,13 @@
   stopBtn.disabled = true;
   continueBtn.hidden = true;
   extendPanel.hidden = true;
+
+  window.addEventListener("beforeunload", (e) => {
+    if (!running) return;
+    e.preventDefault();
+    e.returnValue = t("leave.warn");
+    return t("leave.warn");
+  });
 
   applyI18n();
   syncLangButtons();

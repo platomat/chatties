@@ -15,15 +15,16 @@ if ($id === '') {
     json_error('Thread-ID fehlt.');
 }
 
+$force = !empty($input['force']);
+
 sse_bootstrap();
 
 try {
     $orch = new Orchestrator(new ThreadStore());
     $orch->nextTurnStream($id, static function (string $event, array $payload): void {
         sse_event($event, $payload);
-    });
+    }, $force);
 } catch (Throwable $e) {
-    // prepare/stream may already have emitted an error event; send one if not.
     sse_event('error', [
         'ok' => false,
         'error' => $e->getMessage(),

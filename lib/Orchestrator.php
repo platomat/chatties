@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/LlmClient.php';
 require_once __DIR__ . '/ThreadStore.php';
+require_once __DIR__ . '/ClientAbortedException.php';
 
 final class Orchestrator
 {
@@ -61,9 +62,9 @@ final class Orchestrator
     /**
      * @param callable(string, array):void $emit event name + payload
      */
-    public function nextTurnStream(string $threadId, callable $emit): array
+    public function nextTurnStream(string $threadId, callable $emit, bool $force = false): array
     {
-        $prepared = $this->prepareTurn($threadId);
+        $prepared = $this->prepareTurn($threadId, $force);
         $thread = $prepared['thread'];
 
         if ($prepared['alreadyDone']) {
@@ -90,8 +91,11 @@ final class Orchestrator
             'threadId' => $thread['id'],
         ]);
 
+        $generationId = bin2hex(random_bytes(8));
         $thread['status'] = 'running';
         $thread['error'] = null;
+        $thread['generationId'] = $generationId;
+        $thread['generationStartedAt'] = gmdate('c');
         $this->store->save($thread);
 
         try {
@@ -106,6 +110,12 @@ final class Orchestrator
                 (string) ($agent['apiKey'] ?? ''),
             );
 
+            $latest = $this->store->get($threadId);
+            if ($latest === null || ($latest['generationId'] ?? '') !== $generationId) {
+                // Superseded by a newer turn (e.g. Continue after reload) — discard.
+                return $latest ?? $thread;
+            }
+
             $message = [
                 'id' => bin2hex(random_bytes(4)),
                 'speaker' => $speakerKey,
@@ -115,31 +125,49 @@ final class Orchestrator
                 'createdAt' => gmdate('c'),
             ];
 
-            $thread['messages'][] = $message;
-            $thread['currentRound'] = $round;
-            $thread['nextSpeaker'] = self::SPEAKER_ORDER[($indexInRound + 1) % count(self::SPEAKER_ORDER)];
-            $thread['status'] = ($spoken + 1) >= $totalSlots ? 'done' : 'ready';
-            $thread['error'] = null;
-            $this->store->save($thread);
+            $latest['messages'][] = $message;
+            $latest['currentRound'] = $round;
+            $latest['nextSpeaker'] = self::SPEAKER_ORDER[($indexInRound + 1) % count(self::SPEAKER_ORDER)];
+            $latest['status'] = ($spoken + 1) >= $totalSlots ? 'done' : 'ready';
+            $latest['error'] = null;
+            $latest['generationId'] = null;
+            $latest['generationStartedAt'] = null;
+            $this->store->save($latest);
 
             $emit('done', [
                 'ok' => true,
-                'thread' => $thread,
+                'thread' => $latest,
                 'message' => $message,
-                'done' => $thread['status'] === 'done',
+                'done' => $latest['status'] === 'done',
             ]);
 
-            return $thread;
+            return $latest;
+        } catch (ClientAbortedException $e) {
+            $latest = $this->store->get($threadId) ?? $thread;
+            if (($latest['generationId'] ?? '') === $generationId) {
+                $latest['status'] = 'ready';
+                $latest['error'] = null;
+                $latest['generationId'] = null;
+                $latest['generationStartedAt'] = null;
+                $this->store->save($latest);
+            }
+            // Client is gone — no SSE payload needed.
+            return $latest;
         } catch (Throwable $e) {
-            $thread['status'] = 'error';
-            $thread['error'] = $e->getMessage();
-            $this->store->save($thread);
+            $latest = $this->store->get($threadId) ?? $thread;
+            if (($latest['generationId'] ?? '') === $generationId) {
+                $latest['status'] = 'error';
+                $latest['error'] = $e->getMessage();
+                $latest['generationId'] = null;
+                $latest['generationStartedAt'] = null;
+                $this->store->save($latest);
+            }
             $emit('error', [
                 'ok' => false,
                 'error' => $e->getMessage(),
-                'thread' => $thread,
+                'thread' => $latest,
             ]);
-            return $thread;
+            return $latest;
         }
     }
 
@@ -156,7 +184,7 @@ final class Orchestrator
      *   messages?: array<int, array{role:string, content:string}>
      * }
      */
-    private function prepareTurn(string $threadId): array
+    private function prepareTurn(string $threadId, bool $force = false): array
     {
         $thread = $this->store->get($threadId);
         if ($thread === null) {
@@ -167,7 +195,22 @@ final class Orchestrator
             return ['thread' => $thread, 'alreadyDone' => true];
         }
 
-        if ($thread['status'] === 'running' || $thread['status'] === 'error') {
+        if ($thread['status'] === 'running') {
+            $started = strtotime((string) ($thread['generationStartedAt'] ?? '')) ?: 0;
+            $stale = $started === 0 || (time() - $started) > 90;
+            if (!$force && !$stale) {
+                throw new RuntimeException(
+                    'A generation is still running for this thread. Wait until it finishes or times out, then continue.'
+                );
+            }
+            $thread['status'] = 'ready';
+            $thread['error'] = null;
+            $thread['generationId'] = null;
+            $thread['generationStartedAt'] = null;
+            $this->store->save($thread);
+        }
+
+        if ($thread['status'] === 'error') {
             $thread['status'] = 'ready';
             $thread['error'] = null;
             $this->store->save($thread);
