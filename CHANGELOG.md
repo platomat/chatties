@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0 — 2026-11-13
+
+### Features
+
+- English / German UI with language switcher (preference in `localStorage`)
+
 ## 0.6.0 — 2026-11-13
 
 ### Features
@@ -29,7 +35,7 @@
 
 - Extend finished (or paused) threads with extra rounds
 - Optional moderator directive to steer the next turns
-- Directives appear as dashed “Korrektiv” bubbles in the transcript
+- Nudges appear as dashed “Impuls” / “Nudge” bubbles in the transcript
 
 ## 0.3.0 — 2026-11-13
 

@@ -69,6 +69,25 @@ h1, h2, h3, p { margin: 0; }
 .tagline {
   color: var(--muted);
   font-size: 0.95rem;
+  max-width: 36rem;
+}
+
+.lang-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.lang-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-right: 0.15rem;
+}
+
+.lang-btn[aria-pressed="true"] {
+  border-color: var(--a);
+  color: var(--a);
 }
 
 .panel {

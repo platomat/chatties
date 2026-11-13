@@ -1,4 +1,6 @@
 (() => {
+  const { t, setLang, getLang, applyI18n } = window.ChattiesI18n;
+
   const form = document.getElementById("setup-form");
   const startBtn = document.getElementById("start-btn");
   const stopBtn = document.getElementById("stop-btn");
@@ -28,7 +30,32 @@
 
   function setStatus(text, isError = false) {
     statusEl.textContent = text;
+    statusEl.removeAttribute("data-i18n");
     statusEl.classList.toggle("error", isError);
+  }
+
+  function syncLangButtons() {
+    const current = getLang();
+    document.querySelectorAll(".lang-btn").forEach((btn) => {
+      btn.setAttribute("aria-pressed", btn.dataset.lang === current ? "true" : "false");
+    });
+  }
+
+  function refreshDynamicI18n() {
+    updateContinueButton(currentThread);
+    if (currentThread) {
+      renderMeta(currentThread);
+      if (canContinue(currentThread) && !running) {
+        showResumeHint(currentThread);
+      }
+      const empty = chatEl.querySelector(".empty");
+      if (empty) empty.textContent = t("thread.empty");
+    } else {
+      const empty = chatEl.querySelector(".empty");
+      if (empty) empty.textContent = t("thread.empty");
+      if (!running) setStatus(t("status.ready"));
+    }
+    loadHistory();
   }
 
   function agentPayload(side) {
@@ -73,11 +100,9 @@
     continueBtn.hidden = !ok;
     continueBtn.disabled = !ok;
     if (!ok) return;
-    if (thread.status === "error") {
-      continueBtn.textContent = "Nach Fehler fortsetzen";
-    } else {
-      continueBtn.textContent = "Fortsetzen";
-    }
+    continueBtn.textContent = thread.status === "error"
+      ? t("thread.continueError")
+      : t("thread.continue");
   }
 
   function hideResumeHint() {
@@ -95,14 +120,14 @@
     if (empty) empty.remove();
 
     const isError = thread.status === "error";
-    const btnLabel = isError ? "Nach Fehler fortsetzen" : "Fortsetzen";
+    const btnLabel = isError ? t("thread.continueError") : t("thread.continue");
     const el = document.createElement("article");
     el.className = "bubble hint";
     el.id = "resume-hint";
     el.innerHTML = `
       <div class="who">
-        <span class="who-name">Hinweis</span>
-        <span class="who-meta">Runde ${round}</span>
+        <span class="who-name">${escapeHtml(t("bubble.hint"))}</span>
+        <span class="who-meta">${escapeHtml(t("bubble.round", { round }))}</span>
       </div>
       <div class="body"></div>
       <div class="hint-actions">
@@ -110,8 +135,8 @@
       </div>
     `;
     el.querySelector(".body").textContent = isError
-      ? `Die Konversation ist mit einem Fehler gestoppt. Als Nächstes wäre ${who.name} dran.`
-      : `Die Konversation ist pausiert. Als Nächstes wäre ${who.name} dran.`;
+      ? t("resume.error", { name: who.name })
+      : t("resume.paused", { name: who.name });
     el.querySelector("[data-resume]").addEventListener("click", () => {
       if (running || !currentThread || !canContinue(currentThread)) return;
       runTurns(currentThread);
@@ -160,11 +185,11 @@
     const totalSlots = thread.maxRounds * agents;
     const leftRounds = Math.max(0, thread.maxRounds - thread.currentRound);
     metaEl.innerHTML = `
-      <span>Runde ${thread.currentRound || 0}/${thread.maxRounds}</span>
-      <span>Beiträge: ${spoken}/${totalSlots}</span>
-      <span>Runden Rest: ${leftRounds}</span>
-      <span>Status: ${thread.status}</span>
-      <span>ID: ${thread.id}</span>
+      <span>${escapeHtml(t("meta.round", { current: thread.currentRound || 0, max: thread.maxRounds }))}</span>
+      <span>${escapeHtml(t("meta.messages", { spoken, total: totalSlots }))}</span>
+      <span>${escapeHtml(t("meta.roundsLeft", { left: leftRounds }))}</span>
+      <span>${escapeHtml(t("meta.status", { status: thread.status }))}</span>
+      <span>${escapeHtml(t("meta.id", { id: thread.id }))}</span>
     `;
     updateContinueButton(thread);
     updateExtendPanel(thread);
@@ -176,7 +201,7 @@
     hideResumeHint();
     chatEl.innerHTML = "";
     if (!thread || !thread.messages.length) {
-      chatEl.innerHTML = `<p class="empty">Noch keine Beiträge. Starte eine Konversation.</p>`;
+      chatEl.innerHTML = `<p class="empty">${escapeHtml(t("thread.empty"))}</p>`;
       return;
     }
     for (const msg of thread.messages) {
@@ -192,7 +217,7 @@
     const el = document.createElement("article");
     el.className = `bubble ${isMod ? "mod" : msg.speaker}`;
     if (!animate) el.style.animation = "none";
-    const meta = isMod ? "Korrektiv" : `Runde ${msg.round}`;
+    const meta = isMod ? t("bubble.directive") : t("bubble.round", { round: msg.round });
     el.innerHTML = `
       <div class="who">
         <span class="who-name">${escapeHtml(msg.name || (isMod ? "Moderator" : ""))}</span>
@@ -217,7 +242,7 @@
     el.innerHTML = `
       <div class="who">
         <span class="who-name">${escapeHtml(name)}</span>
-        <span class="who-meta">Runde ${round}</span>
+        <span class="who-meta">${escapeHtml(t("bubble.round", { round }))}</span>
       </div>
       <div class="body">
         <span class="stream-text"></span><span class="typing-dots stream-cursor" aria-hidden="true"><span></span><span></span><span></span></span>
@@ -254,10 +279,10 @@
     el.innerHTML = `
       <div class="who">
         <span class="who-name">${escapeHtml(name)}</span>
-        <span class="who-meta">Runde ${round}</span>
+        <span class="who-meta">${escapeHtml(t("bubble.round", { round }))}</span>
       </div>
       <div class="body">
-        <span class="typing-label">denkt nach</span>
+        <span class="typing-label">${escapeHtml(t("bubble.thinking"))}</span>
         <span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
       </div>
     `;
@@ -281,7 +306,7 @@
     if (!iso) return "—";
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString("de-DE", {
+    return d.toLocaleString(getLang() === "de" ? "de-DE" : "en-US", {
       dateStyle: "short",
       timeStyle: "short",
     });
@@ -315,7 +340,7 @@
     try {
       data = await res.json();
     } catch {
-      throw new Error(`Ungültige Antwort (${res.status})`);
+      throw new Error(t("status.badResponse", { status: res.status }));
     }
     if (!res.ok || data.ok === false) {
       throw new Error(data?.error || `HTTP ${res.status}`);
@@ -354,7 +379,7 @@
     const handleEvent = (event, data) => {
       if (event === "start") {
         bodyEl = beginStreamBubble(data.speaker, data.name, data.round);
-        setStatus(`${data.name} schreibt…`);
+        setStatus(t("status.writing", { name: data.name }));
         return;
       }
       if (event === "token") {
@@ -380,7 +405,7 @@
           currentThread = data.thread;
           renderMeta(data.thread);
         }
-        throw new Error(data.error || "Stream-Fehler");
+        throw new Error(data.error || t("status.streamError"));
       }
     };
 
@@ -413,7 +438,7 @@
     }
 
     if (!finalPayload) {
-      throw new Error("Stream endete ohne Abschluss.");
+      throw new Error(t("status.streamIncomplete"));
     }
     return finalPayload;
   }
@@ -423,42 +448,42 @@
       const data = await api("api/list.php");
       const threads = data.threads || [];
       if (!threads.length) {
-        historyEl.innerHTML = `<p class="empty">Noch keine Threads gespeichert.</p>`;
+        historyEl.innerHTML = `<p class="empty">${escapeHtml(t("history.empty"))}</p>`;
         return;
       }
 
       historyEl.innerHTML = "";
-      for (const t of threads) {
+      for (const item of threads) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "history-item";
-        btn.dataset.id = t.id;
+        btn.dataset.id = item.id;
         btn.innerHTML = `
-          <div class="topic">${escapeHtml(truncate(t.topic) || "(ohne Thema)")}</div>
+          <div class="topic">${escapeHtml(truncate(item.topic) || t("history.noneTopic"))}</div>
           <div class="sub">
-            <span class="badge ${escapeHtml(t.status)}">${escapeHtml(t.status)}</span>
-            <span>${escapeHtml(t.agents.a)} ↔ ${escapeHtml(t.agents.b)}</span>
-            <span>${t.currentRound}/${t.maxRounds} Runden</span>
-            <span>${t.messageCount} Beiträge</span>
-            <span>${escapeHtml(formatWhen(t.createdAt))}</span>
+            <span class="badge ${escapeHtml(item.status)}">${escapeHtml(item.status)}</span>
+            <span>${escapeHtml(item.agents.a)} ↔ ${escapeHtml(item.agents.b)}</span>
+            <span>${escapeHtml(t("history.rounds", { current: item.currentRound, max: item.maxRounds }))}</span>
+            <span>${escapeHtml(t("history.messages", { count: item.messageCount }))}</span>
+            <span>${escapeHtml(formatWhen(item.createdAt))}</span>
           </div>
         `;
-        btn.addEventListener("click", () => openThread(t.id));
+        btn.addEventListener("click", () => openThread(item.id));
         historyEl.appendChild(btn);
       }
       if (threadId) highlightHistory(threadId);
     } catch (err) {
-      historyEl.innerHTML = `<p class="empty">History konnte nicht geladen werden: ${escapeHtml(err.message || String(err))}</p>`;
+      historyEl.innerHTML = `<p class="empty">${escapeHtml(t("history.loadError", { error: err.message || String(err) }))}</p>`;
     }
   }
 
   async function openThread(id, { autoContinue = false } = {}) {
     if (running) {
-      setStatus("Bitte warte, bis der laufende Dialog stoppt.", true);
+      setStatus(t("status.waitRunning"), true);
       return;
     }
 
-    setStatus("Thread wird geladen…");
+    setStatus(t("status.loadingThread"));
     try {
       const data = await api(`api/thread.php?id=${encodeURIComponent(id)}`);
       let thread = data.thread;
@@ -477,22 +502,22 @@
       if (thread.status === "done") {
         hideTyping();
         hideResumeHint();
-        setStatus("Archiviert (fertig).");
+        setStatus(t("status.archived"));
       } else if (thread.status === "error") {
         showResumeHint(thread);
-        setStatus(thread.error || "Fehlerhaft — unten fortsetzen.", true);
+        setStatus(thread.error || t("status.errorResume"), true);
       } else if (canContinue(thread)) {
         showResumeHint(thread);
         const who = nextSpeakerInfo(thread);
         setStatus(
           wasInterrupted
-            ? `Unterbrochen — ${who.name} war dran.`
-            : `Pausiert — als Nächstes ${who.name}.`
+            ? t("status.interrupted", { name: who.name })
+            : t("status.paused", { name: who.name })
         );
       } else {
         hideTyping();
         hideResumeHint();
-        setStatus("Thread geladen.");
+        setStatus(t("status.threadLoaded"));
       }
 
       highlightHistory(thread.id);
@@ -518,13 +543,13 @@
 
     try {
       rememberThreadId(thread.id);
-      setStatus("Konversation läuft…");
+      setStatus(t("status.running"));
 
       while (!abort) {
         const who = nextSpeakerInfo(thread);
         const round = nextRoundNumber(thread);
         showTyping(who.key, who.name, round);
-        setStatus(`${who.name} denkt nach (Runde ${round})…`);
+        setStatus(t("status.thinking", { name: who.name, round }));
 
         turnAbort = new AbortController();
         let turn;
@@ -532,7 +557,7 @@
           turn = await streamTurn(threadId, turnAbort.signal);
         } catch (err) {
           if (err.name === "AbortError" || abort) {
-            setStatus("Gestoppt.");
+            setStatus(t("status.stopped"));
             break;
           }
           throw err;
@@ -547,17 +572,21 @@
         renderMeta(thread);
 
         if (turn.done || thread.status === "done") {
-          setStatus("Fertig.");
+          setStatus(t("status.done"));
           break;
         }
         if (thread.status === "error") {
-          setStatus(thread.error || "Fehler", true);
+          setStatus(thread.error || t("status.error"), true);
           break;
         }
 
         const next = nextSpeakerInfo(thread);
         setStatus(
-          `Runde ${thread.currentRound}/${thread.maxRounds} — ${next.name} ist dran…`
+          t("status.nextUp", {
+            current: thread.currentRound,
+            max: thread.maxRounds,
+            name: next.name,
+          })
         );
       }
     } catch (err) {
@@ -577,7 +606,7 @@
   }
 
   async function runConversation() {
-    setStatus("Thread wird angelegt…");
+    setStatus(t("status.creating"));
     try {
       const start = await api("api/start.php", {
         method: "POST",
@@ -607,7 +636,7 @@
 
   stopBtn.addEventListener("click", () => {
     abort = true;
-    setStatus("Stoppe…");
+    setStatus(t("status.stopping"));
     turnAbort?.abort();
   });
 
@@ -621,12 +650,12 @@
     const extraRounds = Number(val("extend-rounds") || 1);
     const directive = val("extend-directive");
     if (!Number.isFinite(extraRounds) || extraRounds < 1) {
-      setStatus("Bitte mindestens 1 zusätzliche Runde angeben.", true);
+      setStatus(t("status.extendNeedRounds"), true);
       return;
     }
 
     extendBtn.disabled = true;
-    setStatus("Runden werden gewährt…");
+    setStatus(t("status.extending"));
     try {
       const data = await api("api/extend.php", {
         method: "POST",
@@ -643,8 +672,8 @@
       await loadHistory();
       setStatus(
         directive
-          ? `${extraRounds} Runde(n) + Korrektiv — weiter geht’s.`
-          : `${extraRounds} Runde(n) gewährt — weiter geht’s.`
+          ? t("status.extendOkDirective", { n: extraRounds })
+          : t("status.extendOk", { n: extraRounds })
       );
       await runTurns(data.thread);
     } catch (err) {
@@ -655,9 +684,24 @@
 
   refreshHistoryBtn.addEventListener("click", () => loadHistory());
 
+  document.querySelectorAll(".lang-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setLang(btn.dataset.lang);
+      syncLangButtons();
+      refreshDynamicI18n();
+    });
+  });
+
+  document.addEventListener("chatties:lang", () => {
+    syncLangButtons();
+  });
+
   stopBtn.disabled = true;
   continueBtn.hidden = true;
   extendPanel.hidden = true;
+
+  applyI18n();
+  syncLangButtons();
 
   loadHistory().then(() => {
     const id = rememberedThreadId();

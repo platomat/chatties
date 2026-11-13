@@ -16,7 +16,7 @@ Works with any OpenAI-compatible `/v1` chat API (local or remote). PHP orchestra
 3. Make sure your API server(s) are running and reachable.
 4. Open the site, set the shared topic, optional per-agent roles/keys, and max rounds.
 5. Start — agents alternate until the round budget is used up.
-6. When a thread is finished, use **Weiterführen** to grant more rounds and optionally add a moderator directive to steer the next turns.
+6. When a thread is finished, use **Continue further** to grant more rounds and optionally add a nudge to steer the next turns.
 
 `.env` is gitignored. If PHP runs in a VM and the API is on the host, use the host LAN IP (or an SSH tunnel), not `127.0.0.1` inside the VM.
 
