@@ -31,11 +31,11 @@ Run each turn as a **background job** with a stable ID, so the UI can disconnect
 
 ## Acceptance criteria
 
-- [ ] Reload mid-generation does **not** start a second LLM request
-- [ ] After reload, the UI shows the same in-progress / completed turn
-- [ ] Stop/cancel cancels the job and the upstream LLM call
-- [ ] Stale jobs are cleaned up (timeout / crash recovery)
-- [ ] Works with the existing round model, extend/nudge, and API keys
+- [x] Reload mid-generation does **not** start a second LLM request
+- [x] After reload, the UI shows the same in-progress / completed turn
+- [x] Stop/cancel cancels the job and the upstream LLM call
+- [x] Stale jobs are cleaned up (timeout / crash recovery)
+- [x] Works with the existing round model, extend/nudge, and API keys
 
 ## Notes / non-goals (for this issue)
 

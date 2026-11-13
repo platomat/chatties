@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/Env.php';
 require_once __DIR__ . '/ClientAbortedException.php';
+require_once __DIR__ . '/JobCancelledException.php';
 
 final class LlmClient
 {
@@ -11,6 +12,7 @@ final class LlmClient
      * @param array<int, array{role:string, content:string}> $messages
      * @param callable(string):void|null $onDelta
      * @param callable():void|null $onHeartbeat
+     * @param callable():bool|null $shouldCancel return true to abort upstream generation
      */
     public function chat(
         string $apiUrl,
@@ -20,6 +22,7 @@ final class LlmClient
         float $temperature = 0.7,
         string $apiKey = '',
         ?callable $onHeartbeat = null,
+        ?callable $shouldCancel = null,
     ): string {
         $stream = $onDelta !== null;
         $url = $this->completionsUrl($apiUrl);
@@ -87,8 +90,25 @@ final class LlmClient
         $httpStatus = 0;
         $sawEvent = false;
         $streamError = null;
-        $abortHits = 0;
         $lastHeartbeat = time();
+
+        $checkCancel = static function () use (&$streamError, &$lastHeartbeat, $onHeartbeat, $shouldCancel): bool {
+            if ($streamError !== null) {
+                return true;
+            }
+            $now = time();
+            if ($now - $lastHeartbeat >= 10) {
+                $lastHeartbeat = $now;
+                if ($onHeartbeat !== null) {
+                    $onHeartbeat();
+                }
+            }
+            if ($shouldCancel !== null && $shouldCancel()) {
+                $streamError = '__cancelled__';
+                return true;
+            }
+            return false;
+        };
 
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
@@ -104,23 +124,8 @@ final class LlmClient
                 float $dlNow,
                 float $ulTotal,
                 float $ulNow
-            ) use (&$lastHeartbeat, &$streamError, $onHeartbeat): int {
-                if ($streamError !== null) {
-                    return 1;
-                }
-                $now = time();
-                if ($now - $lastHeartbeat >= 10) {
-                    $lastHeartbeat = $now;
-                    if ($onHeartbeat !== null) {
-                        $onHeartbeat();
-                    }
-                    // Confirm abort only around heartbeat (avoid false positives mid-chunk).
-                    if (connection_aborted()) {
-                        $streamError = '__client_aborted__';
-                        return 1;
-                    }
-                }
-                return 0;
+            ) use ($checkCancel): int {
+                return $checkCancel() ? 1 : 0;
             },
             CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (
                 &$buffer,
@@ -128,10 +133,9 @@ final class LlmClient
                 &$httpStatus,
                 &$sawEvent,
                 &$streamError,
-                &$abortHits,
                 &$lastHeartbeat,
                 $onDelta,
-                $onHeartbeat
+                $checkCancel
             ): int {
                 if ($streamError !== null) {
                     return 0;
@@ -184,18 +188,8 @@ final class LlmClient
                     $lastHeartbeat = time();
                 }
 
-                // Require repeated abort signals — single blips happen with proxies.
-                if (connection_aborted()) {
-                    $abortHits++;
-                    if ($abortHits >= 3) {
-                        $streamError = '__client_aborted__';
-                        return 0;
-                    }
-                    if ($onHeartbeat !== null) {
-                        $onHeartbeat();
-                    }
-                } else {
-                    $abortHits = 0;
+                if ($checkCancel()) {
+                    return 0;
                 }
 
                 return strlen($chunk);
@@ -210,6 +204,9 @@ final class LlmClient
         }
         curl_close($ch);
 
+        if ($streamError === '__cancelled__') {
+            throw new JobCancelledException('Job cancelled.');
+        }
         if ($streamError === '__client_aborted__') {
             throw new ClientAbortedException('Client disconnected.');
         }

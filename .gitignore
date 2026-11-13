@@ -1,7 +1,13 @@
-# Runtime / local threads (keep folder via .gitkeep)
+# Runtime / local threads & jobs (keep folders via .gitkeep)
 /data/threads/*.json
 /data/threads/*.tmp
 !/data/threads/.gitkeep
+/data/jobs/*.json
+/data/jobs/*.tmp
+/data/jobs/*.lock
+/data/jobs/*.log
+/data/jobs/*.pid
+!/data/jobs/.gitkeep
 
 # Secrets / local env
 .env

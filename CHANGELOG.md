@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0 — 2026-11-13
+
+### Features
+
+- Background generation jobs: each turn runs detached from the browser SSE connection
+- UI reconnect after reload (`activeJobId` + `api/job.php` stream)
+- Stop cancels the job and the upstream LLM request
+- Stale job cleanup via heartbeat / `CHATTIES_JOB_STALE_SECONDS`
+
 ## 0.7.0 — 2026-11-13
 
 ### Features

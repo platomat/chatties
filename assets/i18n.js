@@ -62,9 +62,10 @@
       "status.waitRunning": "Please wait until the current dialogue stops.",
       "status.loadingThread": "Loading thread…",
       "status.waitingInFlight": "A generation may still be running on the server — waiting…",
+      "status.reconnecting": "Reconnecting to {name}’s generation…",
       "status.archived": "Archived (done).",
       "status.errorResume": "Errored — continue below.",
-      "status.interrupted": "Interrupted — {name} was next. Continue starts a fresh request.",
+      "status.interrupted": "Previous job expired — {name} is next.",
       "status.paused": "Paused — next is {name}.",
       "status.threadLoaded": "Thread loaded.",
       "status.creating": "Creating thread…",
@@ -77,7 +78,7 @@
       "status.nextUp": "Round {current}/{max} — {name} is next…",
       "status.stopping": "Stopping…",
       "leave.warn":
-        "A conversation turn is still running. Leaving or reloading will disconnect the stream — the model request may be cancelled and you’ll need to continue afterwards.",
+        "A turn is generating in the background. You can reload and reconnect; Stop cancels the model request.",
       "status.extending": "Granting rounds…",
       "status.extendNeedRounds": "Please enter at least 1 extra round.",
       "status.extendOkDirective":
@@ -147,9 +148,10 @@
       "status.waitRunning": "Bitte warte, bis der laufende Dialog stoppt.",
       "status.loadingThread": "Thread wird geladen…",
       "status.waitingInFlight": "Auf dem Server läuft ggf. noch eine Generierung — warte kurz…",
+      "status.reconnecting": "Verbinde erneut mit der Generierung von {name}…",
       "status.archived": "Archiviert (fertig).",
       "status.errorResume": "Fehlerhaft — unten fortsetzen.",
-      "status.interrupted": "Unterbrochen — {name} war dran. Fortsetzen startet eine neue Anfrage.",
+      "status.interrupted": "Vorheriger Job abgelaufen — als Nächstes {name}.",
       "status.paused": "Pausiert — als Nächstes {name}.",
       "status.threadLoaded": "Thread geladen.",
       "status.creating": "Thread wird angelegt…",
@@ -162,7 +164,7 @@
       "status.nextUp": "Runde {current}/{max} — {name} ist dran…",
       "status.stopping": "Stoppe…",
       "leave.warn":
-        "Es läuft noch ein Gesprächs-Turn. Beim Verlassen oder Neuladen wird der Stream getrennt — die Modell-Anfrage kann abbrechen, danach musst du fortsetzen.",
+        "Ein Turn läuft im Hintergrund weiter. Neuladen ist ok — du verbindest dich wieder; Stoppen bricht die Modell-Anfrage ab.",
       "status.extending": "Runden werden gewährt…",
       "status.extendNeedRounds": "Bitte mindestens 1 zusätzliche Runde angeben.",
       "status.extendOkDirective":

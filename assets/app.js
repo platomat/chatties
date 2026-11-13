@@ -18,6 +18,7 @@
   let threadId = null;
   let currentThread = null;
   let turnAbort = null;
+  let currentJobId = null;
 
   function val(id) {
     return document.getElementById(id).value.trim();
@@ -139,7 +140,7 @@
       : t("resume.paused", { name: who.name });
     el.querySelector("[data-resume]").addEventListener("click", () => {
       if (running || !currentThread || !canContinue(currentThread)) return;
-      runTurns(currentThread, { force: true });
+      runTurns(currentThread, { force: currentThread.status === "running" });
     });
     chatEl.appendChild(el);
     el.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -348,18 +349,23 @@
     return data;
   }
 
-  function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  async function cancelJob(jobId) {
+    if (!jobId) return;
+    try {
+      await api("api/job.php", {
+        method: "POST",
+        body: JSON.stringify({ id: jobId, action: "cancel" }),
+      });
+    } catch {
+      // ignore — job may already be finished
+    }
   }
 
-  async function streamTurn(threadIdValue, signal, { force = false } = {}) {
-    const res = await fetch("api/turn.php", {
-      method: "POST",
-      headers: {
-        Accept: "text/event-stream",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ id: threadIdValue, force: !!force }),
+  async function watchJob(jobId, signal) {
+    currentJobId = jobId;
+    const res = await fetch(`api/job.php?id=${encodeURIComponent(jobId)}&stream=1`, {
+      method: "GET",
+      headers: { Accept: "text/event-stream" },
       signal,
     });
 
@@ -382,7 +388,11 @@
 
     const handleEvent = (event, data) => {
       if (event === "start") {
-        bodyEl = beginStreamBubble(data.speaker, data.name, data.round);
+        if (!document.getElementById("stream-bubble")) {
+          bodyEl = beginStreamBubble(data.speaker, data.name, data.round);
+        } else {
+          bodyEl = document.querySelector("#stream-bubble .stream-text");
+        }
         setStatus(t("status.writing", { name: data.name }));
         return;
       }
@@ -403,6 +413,15 @@
         finalPayload = data;
         return;
       }
+      if (event === "cancelled") {
+        endStreamBubble();
+        if (data.thread) {
+          currentThread = data.thread;
+          renderMeta(data.thread);
+        }
+        finalPayload = { ...data, cancelled: true, done: false };
+        return;
+      }
       if (event === "error") {
         endStreamBubble();
         if (data.thread) {
@@ -413,38 +432,60 @@
       }
     };
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
+    try {
       while (true) {
-        const sep = buffer.indexOf("\n\n");
-        if (sep === -1) break;
-        const rawEvent = buffer.slice(0, sep);
-        buffer = buffer.slice(sep + 2);
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
 
-        let eventName = "message";
-        const dataLines = [];
-        for (const line of rawEvent.split("\n")) {
-          if (line.startsWith("event:")) eventName = line.slice(6).trim();
-          else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+        while (true) {
+          const sep = buffer.indexOf("\n\n");
+          if (sep === -1) break;
+          const rawEvent = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+
+          let eventName = "message";
+          const dataLines = [];
+          for (const line of rawEvent.split("\n")) {
+            if (line.startsWith("event:")) eventName = line.slice(6).trim();
+            else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+          }
+          if (!dataLines.length) continue;
+          let payload;
+          try {
+            payload = JSON.parse(dataLines.join("\n"));
+          } catch {
+            continue;
+          }
+          handleEvent(eventName, payload);
         }
-        if (!dataLines.length) continue;
-        let payload;
-        try {
-          payload = JSON.parse(dataLines.join("\n"));
-        } catch {
-          continue;
-        }
-        handleEvent(eventName, payload);
       }
+    } finally {
+      if (currentJobId === jobId) currentJobId = null;
     }
 
     if (!finalPayload) {
       throw new Error(t("status.streamIncomplete"));
     }
     return finalPayload;
+  }
+
+  async function streamTurn(threadIdValue, signal, { force = false } = {}) {
+    const started = await api("api/turn.php", {
+      method: "POST",
+      body: JSON.stringify({ id: threadIdValue, force: !!force }),
+    });
+
+    if (started.alreadyDone) {
+      return {
+        ok: true,
+        thread: started.thread,
+        message: null,
+        done: true,
+      };
+    }
+
+    return watchJob(started.jobId, signal);
   }
 
   async function loadHistory() {
@@ -483,32 +524,7 @@
 
   async function fetchThread(id) {
     const data = await api(`api/thread.php?id=${encodeURIComponent(id)}`);
-    return data.thread;
-  }
-
-  async function waitOutInFlight(thread) {
-    if (thread.status !== "running") {
-      return { thread, wasInterrupted: false };
-    }
-
-    const beforeCount = countAgentMessages(thread);
-    setStatus(t("status.waitingInFlight"));
-    let latest = thread;
-
-    for (let i = 0; i < 20; i++) {
-      await sleep(1000);
-      latest = await fetchThread(thread.id);
-      if (latest.status !== "running") {
-        break;
-      }
-    }
-
-    const grew = countAgentMessages(latest) > beforeCount;
-    return {
-      thread: latest,
-      wasInterrupted: !grew,
-      recoveredMessage: grew,
-    };
+    return { thread: data.thread, job: data.job || null };
   }
 
   async function openThread(id, { autoContinue = false } = {}) {
@@ -519,31 +535,28 @@
 
     setStatus(t("status.loadingThread"));
     try {
-      let thread = await fetchThread(id);
-      let wasInterrupted = false;
-
-      if (thread.status === "running") {
-        const waited = await waitOutInFlight(thread);
-        thread = waited.thread;
-        wasInterrupted = waited.wasInterrupted;
-        if (thread.status === "running") {
-          // Still locked — treat as interrupted; Continue will force a new generation.
-          thread = { ...thread, status: "ready", error: null };
-          wasInterrupted = true;
-        } else if (waited.recoveredMessage) {
-          wasInterrupted = false;
-        } else {
-          wasInterrupted = true;
-        }
-      } else if (thread.resumedFromRunning) {
-        wasInterrupted = true;
-      }
+      const loaded = await fetchThread(id);
+      let thread = loaded.thread;
+      const activeJobId = thread.activeJobId || loaded.job?.id || null;
+      const jobActive =
+        !!activeJobId &&
+        thread.status === "running" &&
+        loaded.job &&
+        (loaded.job.status === "queued" || loaded.job.status === "running");
 
       currentThread = thread;
       rememberThreadId(thread.id);
       fillFormFromThread(thread);
       renderMessages(thread);
       renderMeta(thread);
+      highlightHistory(thread.id);
+      document.getElementById("chat").scrollIntoView({ behavior: "smooth", block: "start" });
+
+      if (jobActive) {
+        setStatus(t("status.reconnecting", { name: loaded.job.name || nextSpeakerInfo(thread).name }));
+        await runTurns(thread, { resumeJobId: activeJobId });
+        return;
+      }
 
       if (thread.status === "done") {
         hideTyping();
@@ -556,7 +569,7 @@
         showResumeHint(thread);
         const who = nextSpeakerInfo(thread);
         setStatus(
-          wasInterrupted
+          thread.resumedFromRunning
             ? t("status.interrupted", { name: who.name })
             : t("status.paused", { name: who.name })
         );
@@ -566,18 +579,15 @@
         setStatus(t("status.threadLoaded"));
       }
 
-      highlightHistory(thread.id);
-      document.getElementById("chat").scrollIntoView({ behavior: "smooth", block: "start" });
-
       if (autoContinue && canContinue(thread)) {
-        await runTurns(thread, { force: wasInterrupted });
+        await runTurns(thread, { force: !!thread.resumedFromRunning });
       }
     } catch (err) {
       setStatus(err.message || String(err), true);
     }
   }
 
-  async function runTurns(thread, { force = false } = {}) {
+  async function runTurns(thread, { force = false, resumeJobId = null } = {}) {
     abort = false;
     running = true;
     startBtn.disabled = true;
@@ -594,14 +604,25 @@
       while (!abort) {
         const who = nextSpeakerInfo(thread);
         const round = nextRoundNumber(thread);
+        const resuming = !!resumeJobId;
         showTyping(who.key, who.name, round);
-        setStatus(t("status.thinking", { name: who.name, round }));
+        setStatus(
+          resuming
+            ? t("status.reconnecting", { name: who.name })
+            : t("status.thinking", { name: who.name, round })
+        );
 
         turnAbort = new AbortController();
         let turn;
         try {
-          turn = await streamTurn(threadId, turnAbort.signal, { force });
-          force = false; // only first turn after resume may force-steal the lock
+          if (resumeJobId) {
+            const jobId = resumeJobId;
+            resumeJobId = null;
+            turn = await watchJob(jobId, turnAbort.signal);
+          } else {
+            turn = await streamTurn(threadId, turnAbort.signal, { force });
+            force = false;
+          }
         } catch (err) {
           if (err.name === "AbortError" || abort) {
             setStatus(t("status.stopped"));
@@ -612,6 +633,17 @@
           turnAbort = null;
           hideTyping();
           endStreamBubble();
+        }
+
+        if (turn.cancelled || abort) {
+          if (turn.thread) {
+            thread = turn.thread;
+            currentThread = thread;
+            renderMeta(thread);
+            showResumeHint(thread);
+          }
+          setStatus(t("status.stopped"));
+          break;
         }
 
         thread = turn.thread;
@@ -644,6 +676,7 @@
       hideTyping();
       endStreamBubble();
       running = false;
+      currentJobId = null;
       startBtn.disabled = false;
       stopBtn.disabled = true;
       updateContinueButton(currentThread);
@@ -684,13 +717,17 @@
   stopBtn.addEventListener("click", () => {
     abort = true;
     setStatus(t("status.stopping"));
-    turnAbort?.abort();
+    const jobId = currentJobId;
+    cancelJob(jobId).finally(() => {
+      turnAbort?.abort();
+    });
   });
 
   continueBtn.addEventListener("click", () => {
     if (running || !currentThread || !canContinue(currentThread)) return;
-    // Force: cancel any orphaned server generation left after a reload.
-    runTurns(currentThread, { force: true });
+    // Force only if a stale lock remains; normally Continue starts the next job.
+    const force = currentThread.status === "running";
+    runTurns(currentThread, { force });
   });
 
   extendBtn.addEventListener("click", async () => {
@@ -747,13 +784,6 @@
   stopBtn.disabled = true;
   continueBtn.hidden = true;
   extendPanel.hidden = true;
-
-  window.addEventListener("beforeunload", (e) => {
-    if (!running) return;
-    e.preventDefault();
-    e.returnValue = t("leave.warn");
-    return t("leave.warn");
-  });
 
   applyI18n();
   syncLangButtons();

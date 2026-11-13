@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/lib/http.php';
 require_once dirname(__DIR__) . '/lib/Orchestrator.php';
+require_once dirname(__DIR__) . '/lib/Process.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     json_error('POST erwartet.', 405);
@@ -17,16 +18,38 @@ if ($id === '') {
 
 $force = !empty($input['force']);
 
-sse_bootstrap();
-
 try {
-    $orch = new Orchestrator(new ThreadStore());
-    $orch->nextTurnStream($id, static function (string $event, array $payload): void {
-        sse_event($event, $payload);
-    }, $force);
+    $orch = new Orchestrator(new ThreadStore(), new JobStore());
+    $result = $orch->enqueueTurn($id, $force);
+
+    if (!empty($result['alreadyDone'])) {
+        json_response([
+            'ok' => true,
+            'alreadyDone' => true,
+            'jobId' => null,
+            'thread' => $result['thread'],
+            'done' => true,
+            'message' => null,
+        ]);
+    }
+
+    $job = $result['job'];
+    $payload = [
+        'ok' => true,
+        'alreadyDone' => false,
+        'jobId' => $job['id'],
+        'job' => $job,
+        'thread' => $result['thread'],
+    ];
+
+    if (!empty($result['spawned'])) {
+        json_response($payload);
+    }
+
+    // Fallback: no CLI worker — finish HTTP response, then run inline.
+    chatties_finish_response_and_continue($payload);
+    $orch->runJob((string) $job['id']);
+    exit;
 } catch (Throwable $e) {
-    sse_event('error', [
-        'ok' => false,
-        'error' => $e->getMessage(),
-    ]);
+    json_error($e->getMessage(), 500);
 }
