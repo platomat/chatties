@@ -6,10 +6,13 @@ Env::load();
 
 $defaultApiUrl = Env::get('CHATTIES_API_URL', 'http://127.0.0.1:1234/v1') ?? 'http://127.0.0.1:1234/v1';
 $defaultModel = Env::get('CHATTIES_MODEL', '') ?? '';
+$defaultApiKey = Env::get('CHATTIES_API_KEY', '') ?? '';
 $apiUrlA = Env::get('CHATTIES_API_URL_A', $defaultApiUrl) ?? $defaultApiUrl;
 $apiUrlB = Env::get('CHATTIES_API_URL_B', $defaultApiUrl) ?? $defaultApiUrl;
 $modelA = Env::get('CHATTIES_MODEL_A', $defaultModel) ?? $defaultModel;
 $modelB = Env::get('CHATTIES_MODEL_B', $defaultModel) ?? $defaultModel;
+$apiKeyA = Env::get('CHATTIES_API_KEY_A', $defaultApiKey) ?? $defaultApiKey;
+$apiKeyB = Env::get('CHATTIES_API_KEY_B', $defaultApiKey) ?? $defaultApiKey;
 ?><!DOCTYPE html>
 <html lang="de">
 <head>
@@ -23,7 +26,7 @@ $modelB = Env::get('CHATTIES_MODEL_B', $defaultModel) ?? $defaultModel;
     <header class="top">
       <div>
         <h1 class="brand"><a href="./">chatties</a></h1>
-        <p class="tagline">Zwei lokale LLMs (LM Studio) diskutieren ein Thema, abwechselnd, mit begrenzten Runden.</p>
+        <p class="tagline">Zwei LLMs diskutieren ein Thema abwechselnd — über OpenAI-kompatible API-URLs, mit begrenzten Runden.</p>
       </div>
     </header>
 
@@ -50,12 +53,16 @@ $modelB = Env::get('CHATTIES_MODEL_B', $defaultModel) ?? $defaultModel;
               <input id="agent-a-name" value="Lehrer" required>
             </div>
             <div class="field">
-              <label for="agent-a-url">API-URL (LM Studio)</label>
+              <label for="agent-a-url">API-URL</label>
               <input id="agent-a-url" value="<?= htmlspecialchars($apiUrlA, ENT_QUOTES, 'UTF-8') ?>" required>
             </div>
             <div class="field">
-              <label for="agent-a-model">Model-ID (optional, sonst was geladen ist)</label>
+              <label for="agent-a-model">Model-ID (optional)</label>
               <input id="agent-a-model" value="<?= htmlspecialchars($modelA, ENT_QUOTES, 'UTF-8') ?>" placeholder="z.B. qwen2.5-7b-instruct">
+            </div>
+            <div class="field">
+              <label for="agent-a-key">API-Key (optional)</label>
+              <input id="agent-a-key" type="password" autocomplete="off" value="<?= htmlspecialchars($apiKeyA, ENT_QUOTES, 'UTF-8') ?>" placeholder="Bearer-Token, falls nötig">
             </div>
             <div class="field">
               <label for="agent-a-context">Rollen-Kontext (nur für A)</label>
@@ -70,12 +77,16 @@ $modelB = Env::get('CHATTIES_MODEL_B', $defaultModel) ?? $defaultModel;
               <input id="agent-b-name" value="Schüler" required>
             </div>
             <div class="field">
-              <label for="agent-b-url">API-URL (LM Studio)</label>
+              <label for="agent-b-url">API-URL</label>
               <input id="agent-b-url" value="<?= htmlspecialchars($apiUrlB, ENT_QUOTES, 'UTF-8') ?>" required>
             </div>
             <div class="field">
               <label for="agent-b-model">Model-ID (optional)</label>
               <input id="agent-b-model" value="<?= htmlspecialchars($modelB, ENT_QUOTES, 'UTF-8') ?>" placeholder="z.B. anderes Modell / anderer Port">
+            </div>
+            <div class="field">
+              <label for="agent-b-key">API-Key (optional)</label>
+              <input id="agent-b-key" type="password" autocomplete="off" value="<?= htmlspecialchars($apiKeyB, ENT_QUOTES, 'UTF-8') ?>" placeholder="Bearer-Token, falls nötig">
             </div>
             <div class="field">
               <label for="agent-b-context">Rollen-Kontext (nur für B)</label>

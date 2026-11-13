@@ -102,6 +102,8 @@ final class Orchestrator
                 static function (string $delta) use ($emit): void {
                     $emit('token', ['text' => $delta]);
                 },
+                0.7,
+                (string) ($agent['apiKey'] ?? ''),
             );
 
             $message = [

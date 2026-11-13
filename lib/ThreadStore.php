@@ -149,6 +149,7 @@ final class ThreadStore
         $label = trim((string) ($agent['label'] ?? $fallbackLabel));
         $apiUrl = rtrim(trim((string) ($agent['apiUrl'] ?? $fallbackUrl)), '/');
         $model = trim((string) ($agent['model'] ?? ''));
+        $apiKey = trim((string) ($agent['apiKey'] ?? ''));
         $context = trim((string) ($agent['context'] ?? ''));
 
         return [
@@ -156,6 +157,7 @@ final class ThreadStore
             'label' => $label !== '' ? $label : $fallbackLabel,
             'apiUrl' => $apiUrl !== '' ? $apiUrl : $fallbackUrl,
             'model' => $model,
+            'apiKey' => $apiKey,
             'context' => $context,
         ];
     }

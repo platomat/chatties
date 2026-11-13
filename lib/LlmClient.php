@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/Env.php';
+
 final class LlmClient
 {
     /**
@@ -14,9 +16,11 @@ final class LlmClient
         array $messages,
         ?callable $onDelta = null,
         float $temperature = 0.7,
+        string $apiKey = '',
     ): string {
         $stream = $onDelta !== null;
         $url = $this->completionsUrl($apiUrl);
+        $timeout = $this->httpTimeout();
 
         $payload = [
             'messages' => $messages,
@@ -41,6 +45,9 @@ final class LlmClient
             'Content-Type: application/json',
             'Accept: ' . ($stream ? 'text/event-stream' : 'application/json'),
         ];
+        if ($apiKey !== '') {
+            $headers[] = 'Authorization: Bearer ' . $apiKey;
+        }
 
         if (!$stream) {
             curl_setopt_array($ch, [
@@ -49,7 +56,7 @@ final class LlmClient
                 CURLOPT_POSTFIELDS => $body,
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_CONNECTTIMEOUT => 10,
-                CURLOPT_TIMEOUT => 300,
+                CURLOPT_TIMEOUT => $timeout,
             ]);
 
             $raw = curl_exec($ch);
@@ -80,7 +87,7 @@ final class LlmClient
             CURLOPT_POSTFIELDS => $body,
             CURLOPT_RETURNTRANSFER => false,
             CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_TIMEOUT => 300,
+            CURLOPT_TIMEOUT => $timeout,
             CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (
                 &$buffer,
                 &$content,
@@ -168,6 +175,17 @@ final class LlmClient
         }
 
         return $content;
+    }
+
+    private function httpTimeout(): int
+    {
+        $raw = Env::get('CHATTIES_HTTP_TIMEOUT', '1800') ?? '1800';
+        if (!is_numeric($raw)) {
+            return 1800;
+        }
+        $n = (int) $raw;
+        // 0 = unlimited (curl)
+        return max(0, $n);
     }
 
     private function completionsUrl(string $apiUrl): string

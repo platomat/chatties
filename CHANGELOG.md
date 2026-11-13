@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 — 2026-11-13
+
+### Features
+
+- Optional per-agent API key (Bearer), with `.env` defaults
+- Longer LLM HTTP timeout via `CHATTIES_HTTP_TIMEOUT` (default 1800s)
+- Provider-agnostic wording (any OpenAI-compatible URL)
+
 ## 0.5.1 — 2026-11-13
 
 ### Fixes / UX

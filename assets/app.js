@@ -37,6 +37,7 @@
       label: val(`agent-${side}-name`),
       apiUrl: val(`agent-${side}-url`),
       model: val(`agent-${side}-model`),
+      apiKey: val(`agent-${side}-key`),
       context: val(`agent-${side}-context`),
     };
   }
@@ -49,6 +50,7 @@
       setVal(`agent-${side}-name`, agent.name || "");
       setVal(`agent-${side}-url`, agent.apiUrl || "");
       setVal(`agent-${side}-model`, agent.model || "");
+      setVal(`agent-${side}-key`, agent.apiKey || "");
       setVal(`agent-${side}-context`, agent.context || "");
     }
   }

@@ -33,6 +33,8 @@ function json_error(string $message, int $status = 400, ?array $extra = null): n
 function sse_bootstrap(): void
 {
     ignore_user_abort(true);
+    @set_time_limit(0);
+    @ini_set('max_execution_time', '0');
     @ini_set('zlib.output_compression', '0');
     @ini_set('output_buffering', 'off');
     @ini_set('implicit_flush', '1');
