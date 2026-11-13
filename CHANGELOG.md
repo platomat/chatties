@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 — 2026-11-13
+
+### Features
+
+- Local `.env` defaults for API URL and model (`CHATTIES_API_URL`, `CHATTIES_MODEL`, optional `_A`/`_B`)
+- `.env.example` committed; `.env` stays out of git
+
 ## 0.4.0 — 2026-11-13
 
 ### Features

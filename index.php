@@ -1,5 +1,15 @@
 <?php
 declare(strict_types=1);
+
+require_once __DIR__ . '/lib/Env.php';
+Env::load();
+
+$defaultApiUrl = Env::get('CHATTIES_API_URL', 'http://127.0.0.1:1234/v1') ?? 'http://127.0.0.1:1234/v1';
+$defaultModel = Env::get('CHATTIES_MODEL', '') ?? '';
+$apiUrlA = Env::get('CHATTIES_API_URL_A', $defaultApiUrl) ?? $defaultApiUrl;
+$apiUrlB = Env::get('CHATTIES_API_URL_B', $defaultApiUrl) ?? $defaultApiUrl;
+$modelA = Env::get('CHATTIES_MODEL_A', $defaultModel) ?? $defaultModel;
+$modelB = Env::get('CHATTIES_MODEL_B', $defaultModel) ?? $defaultModel;
 ?><!DOCTYPE html>
 <html lang="de">
 <head>
@@ -41,11 +51,11 @@ declare(strict_types=1);
             </div>
             <div class="field">
               <label for="agent-a-url">API-URL (LM Studio)</label>
-              <input id="agent-a-url" value="http://127.0.0.1:1234/v1" required>
+              <input id="agent-a-url" value="<?= htmlspecialchars($apiUrlA, ENT_QUOTES, 'UTF-8') ?>" required>
             </div>
             <div class="field">
               <label for="agent-a-model">Model-ID (optional, sonst was geladen ist)</label>
-              <input id="agent-a-model" placeholder="z.B. qwen2.5-7b-instruct">
+              <input id="agent-a-model" value="<?= htmlspecialchars($modelA, ENT_QUOTES, 'UTF-8') ?>" placeholder="z.B. qwen2.5-7b-instruct">
             </div>
             <div class="field">
               <label for="agent-a-context">Rollen-Kontext (nur für A)</label>
@@ -61,11 +71,11 @@ declare(strict_types=1);
             </div>
             <div class="field">
               <label for="agent-b-url">API-URL (LM Studio)</label>
-              <input id="agent-b-url" value="http://127.0.0.1:1234/v1" required>
+              <input id="agent-b-url" value="<?= htmlspecialchars($apiUrlB, ENT_QUOTES, 'UTF-8') ?>" required>
             </div>
             <div class="field">
               <label for="agent-b-model">Model-ID (optional)</label>
-              <input id="agent-b-model" placeholder="z.B. anderes Modell / anderer Port">
+              <input id="agent-b-model" value="<?= htmlspecialchars($modelB, ENT_QUOTES, 'UTF-8') ?>" placeholder="z.B. anderes Modell / anderer Port">
             </div>
             <div class="field">
               <label for="agent-b-context">Rollen-Kontext (nur für B)</label>

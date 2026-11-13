@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/Env.php';
+
 final class ThreadStore
 {
     private string $dir;
@@ -142,16 +144,17 @@ final class ThreadStore
 
     private static function normalizeAgent(array $agent, string $fallbackName, string $fallbackLabel): array
     {
+        $fallbackUrl = Env::get('CHATTIES_API_URL', 'http://127.0.0.1:1234/v1') ?? 'http://127.0.0.1:1234/v1';
         $name = trim((string) ($agent['name'] ?? $fallbackName));
         $label = trim((string) ($agent['label'] ?? $fallbackLabel));
-        $apiUrl = rtrim(trim((string) ($agent['apiUrl'] ?? 'http://127.0.0.1:1234/v1')), '/');
+        $apiUrl = rtrim(trim((string) ($agent['apiUrl'] ?? $fallbackUrl)), '/');
         $model = trim((string) ($agent['model'] ?? ''));
         $context = trim((string) ($agent['context'] ?? ''));
 
         return [
             'name' => $name !== '' ? $name : $fallbackName,
             'label' => $label !== '' ? $label : $fallbackLabel,
-            'apiUrl' => $apiUrl !== '' ? $apiUrl : 'http://127.0.0.1:1234/v1',
+            'apiUrl' => $apiUrl !== '' ? $apiUrl : $fallbackUrl,
             'model' => $model,
             'context' => $context,
         ];
