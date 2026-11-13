@@ -5,7 +5,7 @@
 ### Features
 
 - Token streaming from LM Studio through PHP SSE (`api/turn.php`)
-- Live bubble updates with caret while an agent writes
+- Live bubble updates with typing-dots cursor while an agent writes
 - Stop aborts the in-flight stream request
 
 ## 0.2.0 — 2026-11-13

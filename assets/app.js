@@ -133,19 +133,23 @@
         <span class="who-name">${escapeHtml(name)}</span>
         <span class="who-meta">Runde ${round}</span>
       </div>
-      <div class="body"></div>
+      <div class="body">
+        <span class="stream-text"></span><span class="typing-dots stream-cursor" aria-hidden="true"><span></span><span></span><span></span></span>
+      </div>
     `;
     chatEl.appendChild(el);
     el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    return el.querySelector(".body");
+    return el.querySelector(".stream-text");
   }
 
   function endStreamBubble() {
     const el = document.getElementById("stream-bubble");
-    if (el) {
-      el.classList.remove("streaming");
-      el.removeAttribute("id");
-    }
+    if (!el) return;
+    const body = el.querySelector(".body");
+    const text = el.querySelector(".stream-text")?.textContent ?? body?.textContent ?? "";
+    if (body) body.textContent = text;
+    el.classList.remove("streaming");
+    el.removeAttribute("id");
   }
 
   function showTyping(speaker, name) {
