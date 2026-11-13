@@ -1,0 +1,25 @@
+# Runtime / local threads (keep folder via .gitkeep)
+/data/threads/*.json
+/data/threads/*.tmp
+!/data/threads/.gitkeep
+
+# Secrets / local env
+.env
+.env.*
+!.env.example
+
+# Composer (falls später)
+/vendor/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# Logs / caches
+*.log
+.phpunit.result.cache

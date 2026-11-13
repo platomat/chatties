@@ -1,0 +1,94 @@
+<?php
+
+declare(strict_types=1);
+
+final class ThreadStore
+{
+    private string $dir;
+
+    public function __construct(?string $dir = null)
+    {
+        $this->dir = $dir ?? dirname(__DIR__) . '/data/threads';
+        if (!is_dir($this->dir)) {
+            mkdir($this->dir, 0775, true);
+        }
+    }
+
+    public function create(array $payload): array
+    {
+        $id = bin2hex(random_bytes(8));
+        $thread = [
+            'id' => $id,
+            'createdAt' => gmdate('c'),
+            'status' => 'ready',
+            'topic' => trim((string) ($payload['topic'] ?? '')),
+            'maxRounds' => max(1, (int) ($payload['maxRounds'] ?? 3)),
+            'currentRound' => 0,
+            'nextSpeaker' => 'a',
+            'agents' => [
+                'a' => self::normalizeAgent($payload['agentA'] ?? [], 'A', 'Agent A'),
+                'b' => self::normalizeAgent($payload['agentB'] ?? [], 'B', 'Agent B'),
+            ],
+            'messages' => [],
+            'error' => null,
+        ];
+
+        $this->save($thread);
+        return $thread;
+    }
+
+    public function get(string $id): ?array
+    {
+        $path = $this->path($id);
+        if (!is_file($path)) {
+            return null;
+        }
+
+        $raw = file_get_contents($path);
+        if ($raw === false) {
+            return null;
+        }
+
+        $data = json_decode($raw, true);
+        return is_array($data) ? $data : null;
+    }
+
+    public function save(array $thread): void
+    {
+        $path = $this->path((string) $thread['id']);
+        $tmp = $path . '.tmp';
+        $json = json_encode($thread, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            throw new RuntimeException('Thread konnte nicht serialisiert werden.');
+        }
+        if (file_put_contents($tmp, $json, LOCK_EX) === false) {
+            throw new RuntimeException('Thread konnte nicht geschrieben werden.');
+        }
+        rename($tmp, $path);
+    }
+
+    private function path(string $id): string
+    {
+        if (!preg_match('/^[a-f0-9]{16}$/', $id)) {
+            throw new InvalidArgumentException('Ungültige Thread-ID.');
+        }
+        return $this->dir . '/' . $id . '.json';
+    }
+
+    private static function normalizeAgent(array $agent, string $fallbackName, string $fallbackLabel): array
+    {
+        $name = trim((string) ($agent['name'] ?? $fallbackName));
+        $label = trim((string) ($agent['label'] ?? $fallbackLabel));
+        $apiUrl = rtrim(trim((string) ($agent['apiUrl'] ?? 'http://127.0.0.1:1234/v1')), '/');
+        $model = trim((string) ($agent['model'] ?? ''));
+        $context = trim((string) ($agent['context'] ?? ''));
+
+        return [
+            'name' => $name !== '' ? $name : $fallbackName,
+            'label' => $label !== '' ? $label : $fallbackLabel,
+            'apiUrl' => $apiUrl !== '' ? $apiUrl : 'http://127.0.0.1:1234/v1',
+            'model' => $model,
+            'context' => $context,
+        ];
+    }
+}
