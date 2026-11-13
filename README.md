@@ -2,7 +2,7 @@
 
 Two local LLMs talk to each other about a topic you set once — turn by turn, round by round.
 
-Built for [LM Studio](https://lmstudio.ai/) (OpenAI-compatible `/v1` API). PHP orchestrates the ping-pong; the browser shows messages as they arrive.
+Built for [LM Studio](https://lmstudio.ai/) (OpenAI-compatible `/v1` API). PHP orchestrates the ping-pong and proxies token streaming (SSE) so replies appear live in the browser.
 
 ## Requirements
 
@@ -23,7 +23,7 @@ If PHP runs in a VM and LM Studio on the host, use the host LAN IP (or an SSH tu
 | Path | Role |
 |------|------|
 | `index.php` | UI (CSS/JS inlined) |
-| `api/` | `start`, `turn`, `thread` |
+| `api/` | `start`, `turn`, `thread`, `list` |
 | `lib/` | Thread store, LLM client, orchestrator |
 | `data/threads/` | Local JSON threads (gitignored) |
 

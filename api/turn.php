@@ -15,23 +15,17 @@ if ($id === '') {
     json_error('Thread-ID fehlt.');
 }
 
+sse_bootstrap();
+
 try {
     $orch = new Orchestrator(new ThreadStore());
-    $thread = $orch->nextTurn($id);
-    $last = $thread['messages'] !== [] ? $thread['messages'][array_key_last($thread['messages'])] : null;
-    json_response([
-        'ok' => true,
-        'thread' => $thread,
-        'message' => $last,
-        'done' => $thread['status'] === 'done',
-    ]);
+    $orch->nextTurnStream($id, static function (string $event, array $payload): void {
+        sse_event($event, $payload);
+    });
 } catch (Throwable $e) {
-    $store = new ThreadStore();
-    $thread = null;
-    try {
-        $thread = $store->get($id);
-    } catch (Throwable) {
-        // ignore
-    }
-    json_error($e->getMessage(), 500, ['thread' => $thread]);
+    // prepare/stream may already have emitted an error event; send one if not.
+    sse_event('error', [
+        'ok' => false,
+        'error' => $e->getMessage(),
+    ]);
 }

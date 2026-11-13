@@ -83,10 +83,23 @@ declare(strict_types=1);
     </section>
 
     <section class="panel">
-      <h2>Thread</h2>
+      <div class="panel-head">
+        <h2>Thread</h2>
+        <button type="button" class="ghost small" id="continue-btn" hidden>Fortsetzen</button>
+      </div>
       <div class="meta" id="meta"></div>
       <div class="chat" id="chat">
         <p class="empty">Noch keine Beiträge. Starte eine Konversation.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Vergangene Threads</h2>
+        <button type="button" class="ghost small" id="refresh-history-btn">Aktualisieren</button>
+      </div>
+      <div id="history" class="history">
+        <p class="empty">Noch keine Threads gespeichert.</p>
       </div>
     </section>
   </div>

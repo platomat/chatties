@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 — 2026-11-13
+
+### Features
+
+- Token streaming from LM Studio through PHP SSE (`api/turn.php`)
+- Live bubble updates with caret while an agent writes
+- Stop aborts the in-flight stream request
+
+## 0.2.0 — 2026-11-13
+
+### Features
+
+- Thread history: list past dialogs, open by click, deep-link via `?t=<id>`
+- Continue unfinished / errored threads; done threads stay read-only
+- Refresh control for the history list
+
 ## 0.1.0 — 2026-11-13
 
 ### Features

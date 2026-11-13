@@ -6,18 +6,22 @@ final class LlmClient
 {
     /**
      * @param array<int, array{role:string, content:string}> $messages
+     * @param callable(string):void|null $onDelta
      */
-    public function chat(string $apiUrl, string $model, array $messages, float $temperature = 0.7): string
-    {
-        $base = rtrim($apiUrl, '/');
-        $url = str_ends_with($base, '/chat/completions')
-            ? $base
-            : $base . '/chat/completions';
+    public function chat(
+        string $apiUrl,
+        string $model,
+        array $messages,
+        ?callable $onDelta = null,
+        float $temperature = 0.7,
+    ): string {
+        $stream = $onDelta !== null;
+        $url = $this->completionsUrl($apiUrl);
 
         $payload = [
             'messages' => $messages,
             'temperature' => $temperature,
-            'stream' => false,
+            'stream' => $stream,
         ];
         if ($model !== '') {
             $payload['model'] = $model;
@@ -33,42 +37,156 @@ final class LlmClient
             throw new RuntimeException('cURL konnte nicht initialisiert werden.');
         }
 
+        $headers = [
+            'Content-Type: application/json',
+            'Accept: ' . ($stream ? 'text/event-stream' : 'application/json'),
+        ];
+
+        if (!$stream) {
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_POSTFIELDS => $body,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_TIMEOUT => 300,
+            ]);
+
+            $raw = curl_exec($ch);
+            $errno = curl_errno($ch);
+            $error = curl_error($ch);
+            $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($errno !== 0) {
+                throw new RuntimeException('LLM-Request fehlgeschlagen: ' . $error);
+            }
+            if ($raw === false || $raw === '') {
+                throw new RuntimeException('Leere Antwort vom LLM-Server (HTTP ' . $status . ').');
+            }
+
+            return $this->parseNonStreamResponse($raw, $status);
+        }
+
+        $buffer = '';
+        $content = '';
+        $httpStatus = 0;
+        $sawEvent = false;
+        $streamError = null;
+
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
-            CURLOPT_HTTPHEADER => [
-                'Content-Type: application/json',
-                'Accept: application/json',
-            ],
+            CURLOPT_HTTPHEADER => $headers,
             CURLOPT_POSTFIELDS => $body,
-            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_RETURNTRANSFER => false,
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT => 300,
+            CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (
+                &$buffer,
+                &$content,
+                &$httpStatus,
+                &$sawEvent,
+                &$streamError,
+                $onDelta
+            ): int {
+                if ($streamError !== null) {
+                    return 0;
+                }
+                if ($httpStatus === 0) {
+                    $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                }
+                $buffer .= $chunk;
+
+                while (($pos = strpos($buffer, "\n")) !== false) {
+                    $line = trim(substr($buffer, 0, $pos));
+                    $buffer = substr($buffer, $pos + 1);
+                    if ($line === '') {
+                        continue;
+                    }
+
+                    if (!$sawEvent && str_starts_with($line, '{')) {
+                        $maybe = json_decode($line, true);
+                        if (is_array($maybe) && isset($maybe['error'])) {
+                            $streamError = self::errorMessage($maybe['error'], 'LLM-Fehler');
+                            return 0;
+                        }
+                    }
+
+                    if (!str_starts_with($line, 'data:')) {
+                        continue;
+                    }
+
+                    $sawEvent = true;
+                    $payload = trim(substr($line, 5));
+                    if ($payload === '[DONE]') {
+                        continue;
+                    }
+
+                    $json = json_decode($payload, true);
+                    if (!is_array($json)) {
+                        continue;
+                    }
+                    if (isset($json['error'])) {
+                        $streamError = self::errorMessage($json['error'], 'LLM-Fehler');
+                        return 0;
+                    }
+
+                    $delta = $json['choices'][0]['delta']['content'] ?? null;
+                    if (!is_string($delta) || $delta === '') {
+                        continue;
+                    }
+                    $content .= $delta;
+                    $onDelta($delta);
+                }
+
+                return strlen($chunk);
+            },
         ]);
 
-        $raw = curl_exec($ch);
+        $ok = curl_exec($ch);
         $errno = curl_errno($ch);
         $error = curl_error($ch);
-        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        if ($httpStatus === 0) {
+            $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        }
         curl_close($ch);
 
-        if ($errno !== 0) {
-            throw new RuntimeException('LLM-Request fehlgeschlagen: ' . $error);
+        if ($streamError !== null) {
+            throw new RuntimeException($streamError);
         }
-        if ($raw === false || $raw === '') {
-            throw new RuntimeException('Leere Antwort vom LLM-Server (HTTP ' . $status . ').');
+        // CURLE_WRITE_ERROR (23) when we aborted via return 0
+        if ($ok === false && $errno !== 0 && $errno !== 23) {
+            throw new RuntimeException('LLM-Stream fehlgeschlagen: ' . ($error !== '' ? $error : 'unbekannt'));
+        }
+        if ($httpStatus >= 400) {
+            throw new RuntimeException('LLM-Fehler: HTTP ' . $httpStatus);
         }
 
+        $content = trim($content);
+        if ($content === '') {
+            throw new RuntimeException('LLM lieferte keinen Textinhalt.');
+        }
+
+        return $content;
+    }
+
+    private function completionsUrl(string $apiUrl): string
+    {
+        $base = rtrim($apiUrl, '/');
+        return str_ends_with($base, '/chat/completions')
+            ? $base
+            : $base . '/chat/completions';
+    }
+
+    private function parseNonStreamResponse(string $raw, int $status): string
+    {
         $data = json_decode($raw, true);
         if (!is_array($data)) {
             throw new RuntimeException('Ungültige JSON-Antwort vom LLM-Server (HTTP ' . $status . ').');
         }
 
         if ($status >= 400) {
-            $msg = $data['error']['message'] ?? $data['error'] ?? ('HTTP ' . $status);
-            if (is_array($msg)) {
-                $msg = json_encode($msg, JSON_UNESCAPED_UNICODE);
-            }
-            throw new RuntimeException('LLM-Fehler: ' . (string) $msg);
+            throw new RuntimeException(self::errorMessage($data['error'] ?? ('HTTP ' . $status), 'LLM-Fehler'));
         }
 
         $content = $data['choices'][0]['message']['content'] ?? null;
@@ -77,5 +195,17 @@ final class LlmClient
         }
 
         return trim($content);
+    }
+
+    private static function errorMessage(mixed $error, string $prefix): string
+    {
+        if (is_array($error)) {
+            $msg = $error['message'] ?? $error;
+            if (is_array($msg)) {
+                $msg = json_encode($msg, JSON_UNESCAPED_UNICODE);
+            }
+            return $prefix . ': ' . (string) $msg;
+        }
+        return $prefix . ': ' . (string) $error;
     }
 }

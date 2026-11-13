@@ -29,3 +29,33 @@ function json_error(string $message, int $status = 400, ?array $extra = null): n
     }
     json_response($payload, $status);
 }
+
+function sse_bootstrap(): void
+{
+    ignore_user_abort(true);
+    @ini_set('zlib.output_compression', '0');
+    @ini_set('output_buffering', 'off');
+    @ini_set('implicit_flush', '1');
+    while (ob_get_level() > 0) {
+        ob_end_flush();
+    }
+
+    header('Content-Type: text/event-stream; charset=utf-8');
+    header('Cache-Control: no-cache, no-store');
+    header('Connection: keep-alive');
+    header('X-Accel-Buffering: no');
+}
+
+/** @param array<string, mixed> $data */
+function sse_event(string $event, array $data): void
+{
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        $json = '{"error":"encode failed"}';
+    }
+    echo "event: {$event}\ndata: {$json}\n\n";
+    if (function_exists('ob_flush')) {
+        @ob_flush();
+    }
+    flush();
+}

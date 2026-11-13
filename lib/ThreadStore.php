@@ -53,6 +53,56 @@ final class ThreadStore
         return is_array($data) ? $data : null;
     }
 
+    /**
+     * @return list<array{
+     *   id:string,
+     *   createdAt:string,
+     *   status:string,
+     *   topic:string,
+     *   maxRounds:int,
+     *   currentRound:int,
+     *   messageCount:int,
+     *   agents:array{a:string,b:string}
+     * }>
+     */
+    public function list(): array
+    {
+        $files = glob($this->dir . '/*.json') ?: [];
+        $items = [];
+
+        foreach ($files as $file) {
+            $raw = file_get_contents($file);
+            if ($raw === false) {
+                continue;
+            }
+            $data = json_decode($raw, true);
+            if (!is_array($data) || empty($data['id'])) {
+                continue;
+            }
+
+            $items[] = [
+                'id' => (string) $data['id'],
+                'createdAt' => (string) ($data['createdAt'] ?? ''),
+                'status' => (string) ($data['status'] ?? 'unknown'),
+                'topic' => (string) ($data['topic'] ?? ''),
+                'maxRounds' => (int) ($data['maxRounds'] ?? 0),
+                'currentRound' => (int) ($data['currentRound'] ?? 0),
+                'messageCount' => is_array($data['messages'] ?? null) ? count($data['messages']) : 0,
+                'agents' => [
+                    'a' => (string) ($data['agents']['a']['name'] ?? 'A'),
+                    'b' => (string) ($data['agents']['b']['name'] ?? 'B'),
+                ],
+            ];
+        }
+
+        usort(
+            $items,
+            static fn(array $x, array $y): int => strcmp($y['createdAt'], $x['createdAt'])
+        );
+
+        return $items;
+    }
+
     public function save(array $thread): void
     {
         $path = $this->path((string) $thread['id']);

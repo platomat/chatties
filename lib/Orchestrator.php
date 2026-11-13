@@ -16,7 +16,103 @@ final class Orchestrator
     ) {
     }
 
-    public function nextTurn(string $threadId): array
+    /**
+     * @param callable(string, array):void $emit event name + payload
+     */
+    public function nextTurnStream(string $threadId, callable $emit): array
+    {
+        $prepared = $this->prepareTurn($threadId);
+        $thread = $prepared['thread'];
+
+        if ($prepared['alreadyDone']) {
+            $emit('done', [
+                'ok' => true,
+                'thread' => $thread,
+                'message' => null,
+                'done' => true,
+            ]);
+            return $thread;
+        }
+
+        $speakerKey = $prepared['speakerKey'];
+        $agent = $prepared['agent'];
+        $round = $prepared['round'];
+        $spoken = $prepared['spoken'];
+        $totalSlots = $prepared['totalSlots'];
+        $indexInRound = $prepared['indexInRound'];
+
+        $emit('start', [
+            'speaker' => $speakerKey,
+            'name' => $agent['name'],
+            'round' => $round,
+            'threadId' => $thread['id'],
+        ]);
+
+        $thread['status'] = 'running';
+        $thread['error'] = null;
+        $this->store->save($thread);
+
+        try {
+            $content = $this->llm->chat(
+                (string) $agent['apiUrl'],
+                (string) $agent['model'],
+                $prepared['messages'],
+                static function (string $delta) use ($emit): void {
+                    $emit('token', ['text' => $delta]);
+                },
+            );
+
+            $message = [
+                'id' => bin2hex(random_bytes(4)),
+                'speaker' => $speakerKey,
+                'name' => $agent['name'],
+                'round' => $round,
+                'content' => $content,
+                'createdAt' => gmdate('c'),
+            ];
+
+            $thread['messages'][] = $message;
+            $thread['currentRound'] = $round;
+            $thread['nextSpeaker'] = self::SPEAKER_ORDER[($indexInRound + 1) % count(self::SPEAKER_ORDER)];
+            $thread['status'] = ($spoken + 1) >= $totalSlots ? 'done' : 'ready';
+            $thread['error'] = null;
+            $this->store->save($thread);
+
+            $emit('done', [
+                'ok' => true,
+                'thread' => $thread,
+                'message' => $message,
+                'done' => $thread['status'] === 'done',
+            ]);
+
+            return $thread;
+        } catch (Throwable $e) {
+            $thread['status'] = 'error';
+            $thread['error'] = $e->getMessage();
+            $this->store->save($thread);
+            $emit('error', [
+                'ok' => false,
+                'error' => $e->getMessage(),
+                'thread' => $thread,
+            ]);
+            return $thread;
+        }
+    }
+
+    /**
+     * @return array{
+     *   thread: array,
+     *   alreadyDone: bool,
+     *   speakerKey?: string,
+     *   agent?: array,
+     *   round?: int,
+     *   spoken?: int,
+     *   totalSlots?: int,
+     *   indexInRound?: int,
+     *   messages?: array<int, array{role:string, content:string}>
+     * }
+     */
+    private function prepareTurn(string $threadId): array
     {
         $thread = $this->store->get($threadId);
         if ($thread === null) {
@@ -24,13 +120,13 @@ final class Orchestrator
         }
 
         if ($thread['status'] === 'done') {
-            return $thread;
+            return ['thread' => $thread, 'alreadyDone' => true];
         }
-        if ($thread['status'] === 'error') {
-            return $thread;
-        }
-        if ($thread['status'] === 'running') {
-            throw new RuntimeException('Ein Turn läuft bereits.');
+
+        if ($thread['status'] === 'running' || $thread['status'] === 'error') {
+            $thread['status'] = 'ready';
+            $thread['error'] = null;
+            $this->store->save($thread);
         }
 
         $max = (int) $thread['maxRounds'];
@@ -41,7 +137,7 @@ final class Orchestrator
         if ($spoken >= $totalSlots) {
             $thread['status'] = 'done';
             $this->store->save($thread);
-            return $thread;
+            return ['thread' => $thread, 'alreadyDone' => true];
         }
 
         $round = intdiv($spoken, $agentCount) + 1;
@@ -56,12 +152,16 @@ final class Orchestrator
         $remainingRoundsAfterThis = $max - $round;
         $remainingTurnsAfter = $totalSlots - $spoken - 1;
 
-        $thread['status'] = 'running';
-        $thread['error'] = null;
-        $this->store->save($thread);
-
-        try {
-            $messages = $this->buildMessages(
+        return [
+            'thread' => $thread,
+            'alreadyDone' => false,
+            'speakerKey' => $speakerKey,
+            'agent' => $agent,
+            'round' => $round,
+            'spoken' => $spoken,
+            'totalSlots' => $totalSlots,
+            'indexInRound' => $indexInRound,
+            'messages' => $this->buildMessages(
                 $thread,
                 $speakerKey,
                 $round,
@@ -69,34 +169,8 @@ final class Orchestrator
                 $isLastInRound,
                 $remainingRoundsAfterThis,
                 $remainingTurnsAfter,
-            );
-            $content = $this->llm->chat(
-                (string) $agent['apiUrl'],
-                (string) $agent['model'],
-                $messages,
-            );
-
-            $thread['messages'][] = [
-                'id' => bin2hex(random_bytes(4)),
-                'speaker' => $speakerKey,
-                'name' => $agent['name'],
-                'round' => $round,
-                'content' => $content,
-                'createdAt' => gmdate('c'),
-            ];
-            $thread['currentRound'] = $round;
-            $thread['nextSpeaker'] = self::SPEAKER_ORDER[($indexInRound + 1) % $agentCount];
-            $thread['status'] = ($spoken + 1) >= $totalSlots ? 'done' : 'ready';
-            $thread['error'] = null;
-            $this->store->save($thread);
-
-            return $thread;
-        } catch (Throwable $e) {
-            $thread['status'] = 'error';
-            $thread['error'] = $e->getMessage();
-            $this->store->save($thread);
-            throw $e;
-        }
+            ),
+        ];
     }
 
     /**
