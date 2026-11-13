@@ -4,6 +4,8 @@
   const stopBtn = document.getElementById("stop-btn");
   const continueBtn = document.getElementById("continue-btn");
   const refreshHistoryBtn = document.getElementById("refresh-history-btn");
+  const extendPanel = document.getElementById("extend-panel");
+  const extendBtn = document.getElementById("extend-btn");
   const chatEl = document.getElementById("chat");
   const statusEl = document.getElementById("status");
   const metaEl = document.getElementById("meta");
@@ -60,10 +62,20 @@
     return thread && (thread.status === "ready" || thread.status === "error" || thread.status === "running");
   }
 
+  function countAgentMessages(thread) {
+    return (thread.messages || []).filter((m) => m.speaker === "a" || m.speaker === "b").length;
+  }
+
   function updateContinueButton(thread) {
     const ok = canContinue(thread) && !running;
     continueBtn.hidden = !ok;
     continueBtn.disabled = !ok;
+  }
+
+  function updateExtendPanel(thread) {
+    const show = !!thread && !running && (thread.messages?.length || 0) > 0;
+    extendPanel.hidden = !show;
+    extendBtn.disabled = !show;
   }
 
   function renderMeta(thread) {
@@ -71,9 +83,10 @@
     if (!thread) {
       metaEl.innerHTML = "";
       updateContinueButton(null);
+      updateExtendPanel(null);
       return;
     }
-    const spoken = thread.messages.length;
+    const spoken = countAgentMessages(thread);
     const agents = 2;
     const totalSlots = thread.maxRounds * agents;
     const leftRounds = Math.max(0, thread.maxRounds - thread.currentRound);
@@ -85,6 +98,7 @@
       <span>ID: ${thread.id}</span>
     `;
     updateContinueButton(thread);
+    updateExtendPanel(thread);
     highlightHistory(thread.id);
   }
 
@@ -104,13 +118,15 @@
     const empty = chatEl.querySelector(".empty");
     if (empty) empty.remove();
 
+    const isMod = msg.speaker === "mod" || msg.kind === "directive";
     const el = document.createElement("article");
-    el.className = `bubble ${msg.speaker}`;
+    el.className = `bubble ${isMod ? "mod" : msg.speaker}`;
     if (!animate) el.style.animation = "none";
+    const meta = isMod ? "Korrektiv" : `Runde ${msg.round}`;
     el.innerHTML = `
       <div class="who">
-        <span class="who-name">${escapeHtml(msg.name)}</span>
-        <span class="who-meta">Runde ${msg.round}</span>
+        <span class="who-name">${escapeHtml(msg.name || (isMod ? "Moderator" : ""))}</span>
+        <span class="who-meta">${escapeHtml(meta)}</span>
       </div>
       <div class="body"></div>
     `;
@@ -153,7 +169,7 @@
   }
 
   function nextRoundNumber(thread) {
-    return Math.floor((thread.messages?.length || 0) / 2) + 1;
+    return Math.floor(countAgentMessages(thread) / 2) + 1;
   }
 
   function showTyping(speaker, name, round) {
@@ -413,6 +429,7 @@
     startBtn.disabled = true;
     stopBtn.disabled = false;
     updateContinueButton(null);
+    updateExtendPanel(null);
     hideTyping();
 
     try {
@@ -471,6 +488,7 @@
       startBtn.disabled = false;
       stopBtn.disabled = true;
       updateContinueButton(currentThread);
+      updateExtendPanel(currentThread);
       await loadHistory();
     }
   }
@@ -514,10 +532,48 @@
     runTurns(currentThread);
   });
 
+  extendBtn.addEventListener("click", async () => {
+    if (running || !currentThread) return;
+    const extraRounds = Number(val("extend-rounds") || 1);
+    const directive = val("extend-directive");
+    if (!Number.isFinite(extraRounds) || extraRounds < 1) {
+      setStatus("Bitte mindestens 1 zusätzliche Runde angeben.", true);
+      return;
+    }
+
+    extendBtn.disabled = true;
+    setStatus("Runden werden gewährt…");
+    try {
+      const data = await api("api/extend.php", {
+        method: "POST",
+        body: JSON.stringify({
+          id: currentThread.id,
+          extraRounds,
+          directive,
+        }),
+      });
+
+      setVal("extend-directive", "");
+      renderMessages(data.thread);
+      renderMeta(data.thread);
+      await loadHistory();
+      setStatus(
+        directive
+          ? `${extraRounds} Runde(n) + Korrektiv — weiter geht’s.`
+          : `${extraRounds} Runde(n) gewährt — weiter geht’s.`
+      );
+      await runTurns(data.thread);
+    } catch (err) {
+      setStatus(err.message || String(err), true);
+      updateExtendPanel(currentThread);
+    }
+  });
+
   refreshHistoryBtn.addEventListener("click", () => loadHistory());
 
   stopBtn.disabled = true;
   continueBtn.hidden = true;
+  extendPanel.hidden = true;
 
   loadHistory().then(() => {
     const params = new URLSearchParams(window.location.search);

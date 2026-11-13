@@ -87,7 +87,7 @@ final class ThreadStore
                 'topic' => (string) ($data['topic'] ?? ''),
                 'maxRounds' => (int) ($data['maxRounds'] ?? 0),
                 'currentRound' => (int) ($data['currentRound'] ?? 0),
-                'messageCount' => is_array($data['messages'] ?? null) ? count($data['messages']) : 0,
+                'messageCount' => self::countAgentMessages(is_array($data['messages'] ?? null) ? $data['messages'] : []),
                 'agents' => [
                     'a' => (string) ($data['agents']['a']['name'] ?? 'A'),
                     'b' => (string) ($data['agents']['b']['name'] ?? 'B'),
@@ -123,6 +123,21 @@ final class ThreadStore
             throw new InvalidArgumentException('Ungültige Thread-ID.');
         }
         return $this->dir . '/' . $id . '.json';
+    }
+
+    /**
+     * @param list<array<string, mixed>> $messages
+     */
+    private static function countAgentMessages(array $messages): int
+    {
+        $n = 0;
+        foreach ($messages as $msg) {
+            $speaker = (string) ($msg['speaker'] ?? '');
+            if ($speaker === 'a' || $speaker === 'b') {
+                $n++;
+            }
+        }
+        return $n;
     }
 
     private static function normalizeAgent(array $agent, string $fallbackName, string $fallbackLabel): array

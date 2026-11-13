@@ -23,7 +23,7 @@ If PHP runs in a VM and LM Studio on the host, use the host LAN IP (or an SSH tu
 | Path | Role |
 |------|------|
 | `index.php` | UI (CSS/JS inlined) |
-| `api/` | `start`, `turn`, `thread`, `list` |
+| `api/` | `start`, `turn`, `thread`, `list`, `extend` |
 | `lib/` | Thread store, LLM client, orchestrator |
 | `data/threads/` | Local JSON threads (gitignored) |
 

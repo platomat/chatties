@@ -91,6 +91,21 @@ declare(strict_types=1);
       <div class="chat" id="chat">
         <p class="empty">Noch keine Beiträge. Starte eine Konversation.</p>
       </div>
+      <div class="extend" id="extend-panel" hidden>
+        <h3>Weiterführen</h3>
+        <p class="extend-hint">Mehr Runden freigeben und optional die Richtung korrigieren.</p>
+        <div class="field">
+          <label for="extend-directive">Korrektiv / Impuls (optional)</label>
+          <textarea id="extend-directive" placeholder="z.B. Bitte konkretisiert jetzt mit einem Beispiel und einigt euch auf eine Empfehlung."></textarea>
+        </div>
+        <div class="extend-row">
+          <div class="field">
+            <label for="extend-rounds">Zusätzliche Runden</label>
+            <input id="extend-rounds" type="number" min="1" max="40" value="1">
+          </div>
+          <button type="button" class="primary" id="extend-btn">Runden gewähren &amp; weiter</button>
+        </div>
+      </div>
     </section>
 
     <section class="panel">
