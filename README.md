@@ -16,6 +16,7 @@ Built for [LM Studio](https://lmstudio.ai/) (OpenAI-compatible `/v1` API). PHP o
 3. Start LM Studio’s local server and load a model.
 4. Open the site, set the shared topic, optional per-agent roles, and max rounds.
 5. Start — agents alternate until the round budget is used up.
+6. When a thread is finished, use **Weiterführen** to grant more rounds and optionally add a moderator directive to steer the next turns.
 
 `.env` is gitignored. If PHP runs in a VM and LM Studio on the host, use the host LAN IP (or an SSH tunnel), not `127.0.0.1` inside the VM.
 

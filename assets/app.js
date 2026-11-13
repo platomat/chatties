@@ -70,10 +70,72 @@
     const ok = canContinue(thread) && !running;
     continueBtn.hidden = !ok;
     continueBtn.disabled = !ok;
-    if (ok && thread?.status === "error") {
+    if (!ok) return;
+    if (thread.status === "error") {
       continueBtn.textContent = "Nach Fehler fortsetzen";
     } else {
       continueBtn.textContent = "Fortsetzen";
+    }
+  }
+
+  function hideResumeHint() {
+    document.getElementById("resume-hint")?.remove();
+  }
+
+  function showResumeHint(thread) {
+    hideTyping();
+    hideResumeHint();
+    if (!canContinue(thread)) return;
+
+    const who = nextSpeakerInfo(thread);
+    const round = nextRoundNumber(thread);
+    const empty = chatEl.querySelector(".empty");
+    if (empty) empty.remove();
+
+    const isError = thread.status === "error";
+    const btnLabel = isError ? "Nach Fehler fortsetzen" : "Fortsetzen";
+    const el = document.createElement("article");
+    el.className = "bubble hint";
+    el.id = "resume-hint";
+    el.innerHTML = `
+      <div class="who">
+        <span class="who-name">Hinweis</span>
+        <span class="who-meta">Runde ${round}</span>
+      </div>
+      <div class="body"></div>
+      <div class="hint-actions">
+        <button type="button" class="primary small" data-resume>${escapeHtml(btnLabel)}</button>
+      </div>
+    `;
+    el.querySelector(".body").textContent = isError
+      ? `Die Konversation ist mit einem Fehler gestoppt. Als Nächstes wäre ${who.name} dran.`
+      : `Die Konversation ist pausiert. Als Nächstes wäre ${who.name} dran.`;
+    el.querySelector("[data-resume]").addEventListener("click", () => {
+      if (running || !currentThread || !canContinue(currentThread)) return;
+      runTurns(currentThread);
+    });
+    chatEl.appendChild(el);
+    el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function rememberThreadId(id) {
+    threadId = id;
+    setThreadUrl(id);
+    try {
+      sessionStorage.setItem("chatties.threadId", id);
+    } catch {
+      // ignore
+    }
+  }
+
+  function rememberedThreadId() {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("t");
+    if (fromUrl) return fromUrl;
+    try {
+      return sessionStorage.getItem("chatties.threadId");
+    } catch {
+      return null;
     }
   }
 
@@ -109,6 +171,7 @@
 
   function renderMessages(thread) {
     hideTyping();
+    hideResumeHint();
     chatEl.innerHTML = "";
     if (!thread || !thread.messages.length) {
       chatEl.innerHTML = `<p class="empty">Noch keine Beiträge. Starte eine Konversation.</p>`;
@@ -397,23 +460,36 @@
     try {
       const data = await api(`api/thread.php?id=${encodeURIComponent(id)}`);
       let thread = data.thread;
+      const wasInterrupted = !!data.thread.resumedFromRunning || thread.status === "running";
 
       if (thread.status === "running") {
         thread = { ...thread, status: "ready", error: null };
       }
 
-      threadId = thread.id;
       currentThread = thread;
-      setThreadUrl(thread.id);
+      rememberThreadId(thread.id);
       fillFormFromThread(thread);
       renderMessages(thread);
       renderMeta(thread);
 
       if (thread.status === "done") {
+        hideTyping();
+        hideResumeHint();
         setStatus("Archiviert (fertig).");
       } else if (thread.status === "error") {
-        setStatus(thread.error || "Fehlerhaft — Fortsetzen möglich.", true);
+        showResumeHint(thread);
+        setStatus(thread.error || "Fehlerhaft — unten fortsetzen.", true);
+      } else if (canContinue(thread)) {
+        showResumeHint(thread);
+        const who = nextSpeakerInfo(thread);
+        setStatus(
+          wasInterrupted
+            ? `Unterbrochen — ${who.name} war dran.`
+            : `Pausiert — als Nächstes ${who.name}.`
+        );
       } else {
+        hideTyping();
+        hideResumeHint();
         setStatus("Thread geladen.");
       }
 
@@ -436,10 +512,10 @@
     updateContinueButton(null);
     updateExtendPanel(null);
     hideTyping();
+    hideResumeHint();
 
     try {
-      threadId = thread.id;
-      setThreadUrl(threadId);
+      rememberThreadId(thread.id);
       setStatus("Konversation läuft…");
 
       while (!abort) {
@@ -511,6 +587,7 @@
         }),
       });
 
+      rememberThreadId(start.thread.id);
       renderMessages(start.thread);
       renderMeta(start.thread);
       await loadHistory();
@@ -581,8 +658,7 @@
   extendPanel.hidden = true;
 
   loadHistory().then(() => {
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get("t");
+    const id = rememberedThreadId();
     if (id) openThread(id);
   });
 })();

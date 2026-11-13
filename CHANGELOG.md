@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1 — 2026-11-13
+
+### Fixes / UX
+
+- Extend panel only when a thread is `done` (and respects `[hidden]` with CSS)
+- After reload/error: resume hint + button at the end of the chat instead of a fake “thinking” bubble
+- Unlock stuck `running` threads on load; remember last thread id in `sessionStorage`
+
 ## 0.5.0 — 2026-11-13
 
 ### Features

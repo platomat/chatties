@@ -15,10 +15,20 @@ if ($id === '') {
 }
 
 try {
-    $thread = (new ThreadStore())->get($id);
+    $store = new ThreadStore();
+    $thread = $store->get($id);
     if ($thread === null) {
         json_error('Thread nicht gefunden.', 404);
     }
+
+    // Interrupted mid-stream (page reload) → unlock so the client can resume.
+    if (($thread['status'] ?? '') === 'running') {
+        $thread['status'] = 'ready';
+        $thread['error'] = null;
+        $store->save($thread);
+        $thread['resumedFromRunning'] = true;
+    }
+
     json_response(['ok' => true, 'thread' => $thread]);
 } catch (Throwable $e) {
     json_error($e->getMessage(), 500);
