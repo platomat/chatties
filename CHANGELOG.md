@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1 — 2026-11-17
+
+### Features
+
+- Render finished agent replies as Markdown (local `marked` + `DOMPurify`; stream stays plain text)
+
 ## 0.8.0 — 2026-11-13
 
 ### Features

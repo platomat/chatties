@@ -28,7 +28,7 @@ Note: API keys entered in the UI are stored in local thread JSON under `data/thr
 
 | Path | Role |
 |------|------|
-| `index.php` | UI (CSS/JS inlined) |
+| `index.php` | UI (CSS/JS inlined; Markdown via local `assets/vendor/`) |
 | `api/` | `start`, `turn`, `job`, `thread`, `list`, `extend` |
 | `bin/run-job.php` | CLI worker for background generations |
 | `lib/` | Thread/job stores, LLM client, orchestrator |

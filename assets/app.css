@@ -428,6 +428,75 @@ button:disabled {
   word-break: break-word;
 }
 
+.bubble .body.md {
+  white-space: normal;
+}
+
+.bubble .body.md > :first-child { margin-top: 0; }
+.bubble .body.md > :last-child { margin-bottom: 0; }
+
+.bubble .body.md p,
+.bubble .body.md ul,
+.bubble .body.md ol,
+.bubble .body.md pre,
+.bubble .body.md blockquote {
+  margin: 0.55em 0;
+}
+
+.bubble .body.md ul,
+.bubble .body.md ol {
+  padding-left: 1.35em;
+}
+
+.bubble .body.md li { margin: 0.2em 0; }
+
+.bubble .body.md code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.08em 0.35em;
+}
+
+.bubble .body.md pre {
+  overflow-x: auto;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.7rem 0.85rem;
+}
+
+.bubble .body.md pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.bubble .body.md blockquote {
+  border-left: 3px solid var(--line);
+  padding-left: 0.75rem;
+  color: var(--muted);
+}
+
+.bubble .body.md a {
+  color: var(--focus);
+  text-underline-offset: 2px;
+}
+
+.bubble .body.md a:hover { color: var(--ink); }
+
+.bubble .body.md h1,
+.bubble .body.md h2,
+.bubble .body.md h3,
+.bubble .body.md h4 {
+  margin: 0.7em 0 0.35em;
+  font-size: 1.05em;
+  line-height: 1.3;
+}
+
 .bubble.streaming .body {
   display: inline;
 }

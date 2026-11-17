@@ -145,6 +145,8 @@ $apiKeyB = Env::get('CHATTIES_API_KEY_B', $defaultApiKey) ?? $defaultApiKey;
     </section>
   </div>
 
+  <script><?php readfile(__DIR__ . '/assets/vendor/marked.min.js'); ?></script>
+  <script><?php readfile(__DIR__ . '/assets/vendor/purify.min.js'); ?></script>
   <script><?php readfile(__DIR__ . '/assets/i18n.js'); ?></script>
   <script><?php readfile(__DIR__ . '/assets/app.js'); ?></script>
 </body>

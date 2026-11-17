@@ -229,7 +229,7 @@
       </div>
       <div class="body"></div>
     `;
-    el.querySelector(".body").textContent = msg.content;
+    setBubbleBody(el.querySelector(".body"), msg.content);
     chatEl.appendChild(el);
     el.scrollIntoView({ behavior: "smooth", block: "nearest" });
     return el;
@@ -262,7 +262,7 @@
     if (!el) return;
     const body = el.querySelector(".body");
     const text = el.querySelector(".stream-text")?.textContent ?? body?.textContent ?? "";
-    if (body) body.textContent = text;
+    if (body) setBubbleBody(body, text);
     el.classList.remove("streaming");
     el.removeAttribute("id");
   }
@@ -304,6 +304,38 @@
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;");
+  }
+
+  function renderMarkdown(text) {
+    const raw = String(text ?? "");
+    if (!raw) return "";
+    try {
+      if (typeof marked?.parse === "function" && typeof DOMPurify?.sanitize === "function") {
+        const html = marked.parse(raw, { async: false, breaks: true, gfm: true });
+        return DOMPurify.sanitize(typeof html === "string" ? html : String(html), {
+          USE_PROFILES: { html: true },
+        });
+      }
+    } catch {
+      // fall through
+    }
+    return "";
+  }
+
+  function setBubbleBody(el, text) {
+    if (!el) return;
+    const html = renderMarkdown(text);
+    if (html) {
+      el.classList.add("md");
+      el.innerHTML = html;
+      el.querySelectorAll("a[href]").forEach((a) => {
+        a.setAttribute("target", "_blank");
+        a.setAttribute("rel", "noopener noreferrer");
+      });
+      return;
+    }
+    el.classList.remove("md");
+    el.textContent = text ?? "";
   }
 
   function formatWhen(iso) {
