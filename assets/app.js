@@ -157,14 +157,17 @@
   }
 
   function rememberedThreadId() {
+    // Only deep-links / history (`?t=`) reopen a thread.
+    // Bare `/` (logo / home) must stay a fresh setup — do not revive sessionStorage.
     const params = new URLSearchParams(window.location.search);
     const fromUrl = params.get("t");
     if (fromUrl) return fromUrl;
     try {
-      return sessionStorage.getItem("chatties.threadId");
+      sessionStorage.removeItem("chatties.threadId");
     } catch {
-      return null;
+      // ignore
     }
+    return null;
   }
 
   function updateExtendPanel(thread) {
